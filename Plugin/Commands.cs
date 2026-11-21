@@ -16,21 +16,6 @@ internal static class PreviewDefaults
     internal const double Scale = 50, Width = 250, Depth = 210, Height = 220;
 }
 
-public sealed class FlatPackBarnPreview : Command
-{
-    public override string EnglishName => "FlatPackBarnPreview";
-    protected override Result RunCommand(RhinoDoc doc, RunMode mode)
-    {
-        try
-        {
-            Kit.Bake(doc, Kit.BarnObjects(doc), PreviewDefaults.Scale, PreviewDefaults.Width,
-                PreviewDefaults.Depth, PreviewDefaults.Height, true);
-            return Result.Success;
-        }
-        catch (Exception e) { RhinoApp.WriteLine("FlatPackBarnPreview: " + e.Message); return Result.Failure; }
-    }
-}
-
 public sealed class FlatPackPreview : Command
 {
     public override string EnglishName => "FlatPackPreview";

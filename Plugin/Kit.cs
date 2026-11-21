@@ -8,13 +8,6 @@ namespace ThreeDeePrint;
 
 public static class Kit
 {
-    public static RhinoObject[] BarnObjects(RhinoDoc doc)
-    {
-        return doc.Layers.Where(l => !l.IsDeleted && (l.FullPath.StartsWith("COMPARE - Simplified full size::")
-            || l.FullPath.StartsWith("INTERIOR - Simplified full size::")) && !l.FullPath.EndsWith("::Printable union"))
-            .SelectMany(l => doc.Objects.FindByLayer(l) ?? Array.Empty<RhinoObject>()).Where(o => !o.IsInstanceDefinitionGeometry).ToArray();
-    }
-
     public static Layer Bake(RhinoDoc doc, RhinoObject[] objects, double scale, double width, double depth, double height, bool barn)
         => BakeWithJoints(doc, objects, scale, width, depth, height, barn, false);
 

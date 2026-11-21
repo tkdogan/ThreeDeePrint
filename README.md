@@ -2,7 +2,7 @@
 
 ## Run from Rider on macOS
 
-Open [ThreeDeePrint.sln](ThreeDeePrint.sln) in Rider. Quit any running Rhino 8 session after saving your work, then press **Play** with **Rhino 8 — Barn preview** selected. Rider builds the plug-in, launches Rhino 8 with a build-folder copy of the barn, and runs the preview at 1:50 on Prusa MK4S plates. Inspect **3D Printer → Kit 01** and run **FlatPackExportSTL** when ready. Quit the test Rhino session before the next Play to load your latest build.
+Open [ThreeDeePrint.sln](ThreeDeePrint.sln) in Rider. Quit any running Rhino 8 session after saving your work, then press **Play** with **Rhino 8 — Flat-pack preview** selected. Rider builds the plug-in, launches Rhino 8 with a build-folder copy of the barn, and starts **FlatPackPreview**. Select the components to print and press **Enter**. Inspect **3D Printer → Kit 01** and run **FlatPackExportSTL** when ready. Quit the test Rhino session before the next Play to load your latest build.
 
 ## Install a packaged build
 
@@ -37,7 +37,7 @@ Select the baked pieces and run **FlatPackExportPrusa**. **Project** writes one 
 
 Build [ThreeDeePrint.csproj](Plugin/ThreeDeePrint.csproj) using `dotnet build Plugin -c Release`. The build produces the managed RHP under `Plugin/bin/Release/net7.0` and the Mac installer under `dist`.
 
-The plug-in uses Manifold to subtract previously allocated material with 0.05 mm clearance on each axis. Floors take precedence at intersections, followed by walls, roofs and decks, then details. RhinoCommon prepares components, scores planar orientations for bed contact and overhang, splits oversized panels with straight glue seams and packs the part silhouettes onto plates. The Barn preset uses the simplified exterior and interior, and recovers the two open exterior panels from their projected render geometry. For other BIM models, select separate solid components with a supporting planar face. Explode blocks first.
+The plug-in uses Manifold to subtract previously allocated material with 0.05 mm clearance on each axis. Floors take precedence at intersections, followed by walls, roofs and decks, then details. RhinoCommon prepares components, scores planar orientations for bed contact and overhang, splits oversized panels with straight glue seams and packs the part silhouettes onto plates. For the barn example, select components from the simplified exterior and interior layers. The two open exterior panels are recovered from their projected render geometry. For other BIM models, select separate solid components with a supporting planar face. Explode blocks first.
 
 
 The project includes a universal macOS geometry library for Apple silicon and Intel. A normal Rider build copies it beside the RHP. To rebuild that library from its pinned, checksum-verified source, run [build-mac.sh](Plugin/Native/build-mac.sh) with CMake and the Xcode command-line tools installed.

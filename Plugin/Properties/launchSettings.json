@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "Rhino 8 — Barn preview": {
+    "Rhino 8 — Flat-pack preview": {
       "commandName": "Executable",
       "executablePath": "/Applications/Rhino 8.app/Contents/MacOS/Rhinoceros",
       "workingDirectory": "$(TargetDir)",
