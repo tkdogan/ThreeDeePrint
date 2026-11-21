@@ -16,13 +16,20 @@ public static class Kit
     }
 
     public static Layer Bake(RhinoDoc doc, RhinoObject[] objects, double scale, double width, double depth, double height, bool barn)
+        => BakeWithJoints(doc, objects, scale, width, depth, height, barn, false);
+
+    public static Layer BakeWithJoints(RhinoDoc doc, RhinoObject[] objects, double scale, double width, double depth, double height, bool barn, bool fingers)
+        => BakeSettings(doc,objects,new PreviewSettings(barn,scale,width,depth,height,fingers,.20));
+
+    internal static Layer BakeSettings(RhinoDoc doc, RhinoObject[] objects, PreviewSettings settings)
     {
+        var (barn,scale,width,depth,height,fingers,clearance) = settings;
         if (objects.Length==0) throw new ArgumentException("No components found. Use Select for other models.");
         if (!(scale>0 && width>6 && depth>6 && height>0)) throw new ArgumentException("Invalid scale or build volume.");
         if (doc.ModelUnitSystem is UnitSystem.None or UnitSystem.CustomUnits or UnitSystem.Unset)
             throw new ArgumentException("Set the document's physical units first.");
         double mm = RhinoMath.UnitScale(doc.ModelUnitSystem,UnitSystem.Millimeters);
-        var parts = Parts.Prepare(objects,mm/scale,width-2*PlatePacking.Margin,depth-2*PlatePacking.Margin,barn);
+        var parts = Parts.Prepare(objects,mm/scale,width-2*PlatePacking.Margin,depth-2*PlatePacking.Margin,barn,fingers,clearance);
         var layout = PlatePacking.Pack(parts,width,depth,height);
         if (layout.Count==0) throw new ArgumentException("No printable pieces at this scale.");
         var addedLayers = new List<int>();

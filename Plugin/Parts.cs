@@ -6,37 +6,26 @@ using Rhino.Geometry;
 namespace ThreeDeePrint;
 
 internal record Part(string Name, Guid Source, Mesh Assembled, Mesh Flat);
+internal record Component(string Name, Guid Source, Brep Solid);
 internal static class Parts
 {
     private const double Tol = .001; // All geometry here is at print scale, in millimetres.
-    public static IEnumerable<Part> Prepare(IEnumerable<RhinoObject> objects, double factor, double width, double depth, bool barn)
+    public static IEnumerable<Part> Prepare(IEnumerable<RhinoObject> objects, double factor, double width, double depth, bool barn, bool fingers, double clearance)
     {
-        var prepared = new List<Part>();
-        var cutters = new List<(Brep Solid, BoundingBox Original)>();
+        var components = new List<Component>();
         foreach (var obj in objects.OrderBy(o => Priority(o.Attributes.Name ?? "")))
         {
             string name = obj.Attributes.Name ?? "Component";
-            try
-            {
-                var solid = Solid(obj, factor, barn);
-                var box = solid.GetBoundingBox(true);
-                var pieces = new List<Brep> { solid };
-                foreach (var cutter in cutters)
-                {
-                    var overlap = BoundingBox.Intersection(box, cutter.Original);
-                    if (!overlap.IsValid || overlap.Diagonal.X < Tol || overlap.Diagonal.Y < Tol || overlap.Diagonal.Z < Tol) continue;
-                    pieces = pieces.SelectMany(b => Subtract(b, cutter.Solid)).ToList();
-                }
-                var expanded = solid.DuplicateBrep();
-                var size = box.Diagonal;
-                expanded.Transform(Transform.Scale(new Plane(box.Center, Vector3d.ZAxis),
-                    1+.1/size.X, 1+.1/size.Y, 1+.1/size.Z));
-                cutters.Add((expanded, box));
-                foreach (var piece in pieces)
-                    foreach (var part in Flatten(piece, name, obj.Id, width, depth))
-                        prepared.Add(part);
-            }
-            catch (Exception ex) { throw new InvalidOperationException($"{name} ({obj.Id}): {ex.Message}", ex); }
+            try { components.Add(new Component(name,obj.Id,Solid(obj,factor,barn))); }
+            catch (Exception ex) { throw new InvalidOperationException($"{name} ({obj.Id}): {ex.Message}",ex); }
+        }
+        components=SolidCleanup.Cut(components);
+        if (fingers) FingerJoints.Apply(components,clearance);
+        var prepared = new List<Part>();
+        foreach (var component in components)
+        {
+            try { prepared.AddRange(Flatten(component.Solid,component.Name,component.Source,width,depth)); }
+            catch (Exception ex) { throw new InvalidOperationException($"{component.Name}: {ex.Message}",ex); }
         }
         return prepared;
 
@@ -112,69 +101,7 @@ internal static class Parts
         return regions[0].Faces[0].CreateExtrusion(new LineCurve(Point3d.Origin,Point3d.Origin+direction),true);
     }
 
-    private static IEnumerable<Brep> Subtract(Brep body, Brep cutter)
-    {
-        if (!BoundingBox.Intersection(body.GetBoundingBox(true),cutter.GetBoundingBox(true)).IsValid) return new[]{body};
-        foreach (var tolerance in new[] { Tol, Tol/10, Tol*2 })
-        {
-            var cut = Brep.CreateBooleanDifference(body,cutter,tolerance);
-            if (cut != null && cut.All(p => p.IsValid && p.IsSolid)) return cut;
-        }
-        // Perturb a coincident seam by a few microns, far below the glue allowance.
-        var shifted = cutter.DuplicateBrep();
-        shifted.Translate(.0023,.0037,.0041);
-        var retry = Brep.CreateBooleanDifference(body,shifted,Tol/10);
-        if (retry != null && retry.All(p=>p.IsValid && p.IsSolid)) return retry;
-        var meshes = Mesh.CreateBooleanDifference(new[]{ToMesh(body)},new[]{ToMesh(cutter)},
-            new MeshBooleanOptions {Tolerance=Tol},out var status);
-        if (status == Rhino.Commands.Result.Nothing) return new[]{body};
-        if (status != Rhino.Commands.Result.Success || meshes == null || meshes.Any(m=>!m.IsValid || !m.IsClosed))
-            return PlanarDifference(body,cutter);
-        return meshes.Select(m => Brep.CreateFromMesh(m,true));
-    }
-
-    // Partition by the cutter's boundary planes when coincident edges defeat a solid boolean.
-    // Inside/outside is constant within each resulting cell.
-    private static IEnumerable<Brep> PlanarDifference(Brep body, Brep cutter)
-    {
-        var cells = new List<Brep>{body};
-        var box = body.GetBoundingBox(true);
-        box.Inflate(1);
-        foreach (var face in cutter.Faces)
-        {
-            if (!face.TryGetPlane(out var plane,Tol)) throw new InvalidOperationException("Curved joint subtraction failed.");
-            var surface = PlaneSurface.CreateThroughBox(plane,box);
-            if (surface == null) continue;
-            var next = new List<Brep>();
-            foreach (var cell in cells)
-            {
-                if (!BoundingBox.Intersection(cell.GetBoundingBox(true),cutter.GetBoundingBox(true)).IsValid) { next.Add(cell); continue; }
-                var distances = cell.Vertices.Select(v=>plane.DistanceTo(v.Location)).ToArray();
-                if (distances.Min() >= -.02 || distances.Max() <= .02) { next.Add(cell); continue; }
-                var fragments = cell.Split(surface.ToBrep(),Tol/10);
-                if (fragments.Length < 2) throw new InvalidOperationException($"Cannot split planar joint at {plane.Origin}, normal {plane.Normal}, cell {cell.GetBoundingBox(true)}, cutter {cutter.GetBoundingBox(true)}.");
-                foreach (var fragment in fragments)
-                {
-                    var closed = fragment.CapPlanarHoles(Tol);
-                    if (closed == null || !closed.IsSolid) throw new InvalidOperationException("Cannot close planar joint.");
-                    next.Add(closed);
-                }
-            }
-            cells = next;
-        }
-        var outside = cells.Where(cell =>
-        {
-            // Each half-space of each cutter plane has a constant sign over the cell,
-            // so the volume centroid has the same classification even for concave cells.
-            using var mass = VolumeMassProperties.Compute(cell);
-            return mass != null && !cutter.IsPointInside(mass.Centroid,Tol/10,true);
-        }).ToArray();
-        if (outside.Length < 2) return outside;
-        var joined = Brep.CreateBooleanUnion(outside,Tol);
-        return joined != null && joined.All(b=>b.IsValid && b.IsSolid) ? joined : outside;
-    }
-
-    private static Mesh ToMesh(Brep b)
+    internal static Mesh ToMesh(Brep b)
     {
         var mesh = new Mesh();
         foreach (var patch in Mesh.CreateFromBrep(b, MeshingParameters.QualityRenderMesh)) mesh.Append(patch);

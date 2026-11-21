@@ -11,6 +11,7 @@
   <ItemGroup>
     <PackageReference Include="Clipper2" Version="2.0.0" GeneratePathProperty="true" />
     <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
+    <None Update="Native/libThreeDeeSolid.dylib;Native/Manifold-LICENSE.txt;Native/Manifold-AUTHORS.txt" TargetPath="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Properties/RiderPreview.py" TargetPath="RiderPreview.py" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Barn_original_with_simplified_interior.3dm" Link="Barn_original_with_simplified_interior.3dm" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
@@ -20,7 +21,7 @@
       <Bundle>$(PackageRoot)/ThreeDeePrint.rhp</Bundle>
     </PropertyGroup>
     <MakeDir Directories="$(Bundle);$(MSBuildProjectDirectory)/../dist"/>
-    <Copy SourceFiles="$(TargetPath);$(TargetDir)Clipper2Lib.dll;$(PkgClipper2)/License.txt" DestinationFolder="$(Bundle)"/>
+    <Copy SourceFiles="$(TargetPath);$(TargetDir)Clipper2Lib.dll;$(TargetDir)libThreeDeeSolid.dylib;$(TargetDir)Manifold-LICENSE.txt;$(TargetDir)Manifold-AUTHORS.txt;$(PkgClipper2)/License.txt" DestinationFolder="$(Bundle)"/>
     <ZipDirectory SourceDirectory="$(PackageRoot)" DestinationFile="$(MSBuildProjectDirectory)/../dist/ThreeDeePrint.macrhi" Overwrite="true"/>
   </Target>
 </Project>

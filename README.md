@@ -6,14 +6,18 @@ Open [ThreeDeePrint.sln](ThreeDeePrint.sln) in Rider. Quit any running Rhino 8 s
 
 ## Install a packaged build
 
-**Install on Mac** by double-clicking [ThreeDeePrint.macrhi](dist/ThreeDeePrint.macrhi), then quit and reopen Rhino. The installer contains the compiled C# plug-in and its polygon library. Use Rhino 8.21 or later. [McNeel’s Mac installer instructions](https://developer.rhino3d.com/guides/rhinocommon/plugin-installers-mac/)
+**Install on Mac** by double-clicking [ThreeDeePrint.macrhi](dist/ThreeDeePrint.macrhi), then quit and reopen Rhino. The installer contains the compiled C# plug-in and its geometry libraries. Use Rhino 8.21 or later. [McNeel’s Mac installer instructions](https://developer.rhino3d.com/guides/rhinocommon/plugin-installers-mac/)
 
 ## Bake and review
 
-1. Open the barn source file in Rhino and run **FlatPackPreview**. Choose **Barn** for its simplified component layers, or **Select** to pick individual Breps, extrusions or closed meshes in another document.
-2. Enter the scale denominator and build volume in millimetres. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints.
+1. Open the barn source file in Rhino and run **FlatPackPreview**. In the settings dialog, choose **Simplified barn layers** or **Select components in Rhino**.
+2. Set the scale denominator and build volume. To add alignment joints, enable **Add wall-to-slab fingers** and choose the **clearance per side** in millimetres. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints.
 3. Expand **3D Printer → Kit 01** in Layers. Each **Plate** layer contains its bed outline, label and numbered meshes at physical print size. The viewport zooms to the plates. Toggle the plate layers to inspect them individually. Turn on **Assembly reference**, select its objects and use Zoom Selected to see the numbered pieces in their assembled positions. The original building stays in the document.
 4. Save the Rhino document to keep the preview. Each new bake creates a separate numbered kit. Preview creates no STL files.
+
+### Alignment joints
+
+Plain glue joints are the default. Finger mode adds rows of 5 mm wide tabs to eligible lower panel edges and cuts matching blind sockets in the horizontal slab underneath. The tabs enter vertically during assembly. The default 0.20 mm clearance on each side makes a 5.40 mm socket for a 5 mm finger. The same allowance applies at the tip. Short edges, thin slabs, openings and contacts blocked by another part can limit where joints are placed. Rhino reports the number of completed pairs. Roof seams and wall-to-wall corners retain their trimmed glue faces.
 
 ## Export the reviewed kit
 
@@ -21,13 +25,16 @@ Run **FlatPackExportSTL**, pick one printable mesh in the desired kit, choose an
 
 STL stores coordinates without units. Import in **millimetres**. Import a plate’s files together with relative positions preserved to reproduce its Rhino layout. Review thin details and local overhangs in your slicer before printing.
 
-[Open the baked barn preview](Barn-plugin-preview/Preview.3dm) or [browse its exported STLs](Barn-plugin-preview/). This example uses the C# commands. Its part IDs match the layers in this preview.
+[Open the baked barn preview](Barn-plugin-preview/Preview.3dm) or [browse its exported STLs](Barn-plugin-preview/). This example uses 21 alignment fingers, 0.20 mm clearance per side, and 34 parts on five MK4S plates. Its part IDs match the layers in the preview.
 
 ## Source and build
 
 Build [ThreeDeePrint.csproj](Plugin/ThreeDeePrint.csproj) using `dotnet build Plugin -c Release`. The build produces the managed RHP under `Plugin/bin/Release/net7.0` and the Mac installer under `dist`.
 
-The plug-in uses RhinoCommon to prepare independent components, trim overlaps, score planar orientations for bed contact and overhang, split oversized panels with straight glue seams and pack the part silhouettes onto plates. The Barn preset uses the simplified exterior and interior, and recovers the two open exterior panels from their projected render geometry. For other BIM models, select separate solid components with a supporting planar face. Explode blocks first.
+The plug-in uses Manifold to subtract previously allocated material with 0.05 mm clearance on each axis. Floors take precedence at intersections, followed by walls, roofs and decks, then details. RhinoCommon prepares components, scores planar orientations for bed contact and overhang, splits oversized panels with straight glue seams and packs the part silhouettes onto plates. The Barn preset uses the simplified exterior and interior, and recovers the two open exterior panels from their projected render geometry. For other BIM models, select separate solid components with a supporting planar face. Explode blocks first.
+
+
+The project includes a universal macOS geometry library for Apple silicon and Intel. A normal Rider build copies it beside the RHP. To rebuild that library from its pinned, checksum-verified source, run [build-mac.sh](Plugin/Native/build-mac.sh) with CMake and the Xcode command-line tools installed.
 
 ---
 

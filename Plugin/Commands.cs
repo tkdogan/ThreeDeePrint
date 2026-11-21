@@ -34,43 +34,70 @@ public sealed class FlatPackBarnPreview : Command
 public sealed class FlatPackPreview : Command
 {
     public override string EnglishName => "FlatPackPreview";
+    private PreviewSettings previous = PreviewSettings.Defaults;
+
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
         try
         {
-            using var prompt = new GetOption();
-            prompt.SetCommandPrompt("Source components");
-            prompt.AddOption("Barn"); prompt.AddOption("Select");
-            prompt.SetDefaultString("Barn"); prompt.AcceptNothing(true);
-            var answer = prompt.Get();
-            if (answer == GetResult.Cancel) return Result.Cancel;
-            bool barn = answer == GetResult.Nothing || prompt.Option().EnglishName == "Barn";
-            RhinoObject[] inputs;
-            if (barn) inputs = Kit.BarnObjects(doc);
+            var barnObjects = Kit.BarnObjects(doc);
+            PreviewSettings settings;
+            if (mode == RunMode.Interactive)
+            {
+                using var dialog = new PreviewDialog(barnObjects.Length>0,previous);
+                if (!dialog.ShowModal(Rhino.UI.RhinoEtoApp.MainWindow)) return Result.Cancel;
+                settings = dialog.Values;
+            }
             else
             {
-                var result = RhinoGet.GetMultipleObjects("Select individual printable components", false,
-                    ObjectType.Brep | ObjectType.Extrusion | ObjectType.Mesh, out var refs);
-                if (result != Result.Success) return result;
-                inputs = refs.Select(r => r.Object()).ToArray();
+                var scripted = ReadSettings();
+                if (scripted==null) return Result.Cancel;
+                settings = scripted;
             }
-            double scale = PreviewDefaults.Scale, width = PreviewDefaults.Width,
-                depth = PreviewDefaults.Depth, height = PreviewDefaults.Height;
-            bool ReadDimension(string label, ref double value)
+            var inputs = barnObjects;
+            if (!settings.Barn)
             {
-                var result = RhinoGet.GetNumber(label,true,ref value,0.01,1000000);
-                return result is Result.Success or Result.Nothing;
+                var result = RhinoGet.GetMultipleObjects("Select individual printable components",false,
+                    ObjectType.Brep | ObjectType.Extrusion | ObjectType.Mesh,out var refs);
+                if (result!=Result.Success) return result;
+                inputs = refs.Select(r=>r.Object()).ToArray();
             }
-            if (!ReadDimension("Scale denominator", ref scale) ||
-                !ReadDimension("Bed width in mm", ref width) ||
-                !ReadDimension("Bed depth in mm", ref depth) ||
-                !ReadDimension("Build height in mm", ref height)) return Result.Cancel;
-            var root = Kit.Bake(doc, inputs, scale, width, depth, height, barn);
+            var root = Kit.BakeSettings(doc,inputs,settings);
+            previous = settings;
             RhinoApp.WriteLine($"Baked {root.FullPath}. Inspect the plate layers, then run FlatPackExportSTL.");
             return Result.Success;
         }
-        catch (Exception e) { RhinoApp.WriteLine("FlatPackPreview: " + e.Message); return Result.Failure; }
+        catch (Exception e) { RhinoApp.WriteLine("FlatPackPreview: "+e.Message); return Result.Failure; }
     }
+
+    private static PreviewSettings? ReadSettings()
+    {
+        using var prompt = new GetOption();
+        prompt.SetCommandPrompt("Source components");
+        prompt.AddOption("Barn"); prompt.AddOption("Select");
+        prompt.SetDefaultString("Barn"); prompt.AcceptNothing(true);
+        var answer = prompt.Get();
+        if (answer!=GetResult.Option && answer!=GetResult.Nothing) return null;
+        bool barn = answer==GetResult.Nothing || prompt.Option().EnglishName=="Barn";
+        var defaults = PreviewSettings.Defaults;
+        double scale=defaults.Scale,width=defaults.Width,depth=defaults.Depth,height=defaults.Height;
+        bool Read(string label, ref double value) =>
+            RhinoGet.GetNumber(label,true,ref value,.01,1000000) is Result.Success or Result.Nothing;
+        if (!Read("Scale denominator",ref scale) || !Read("Bed width in mm",ref width) ||
+            !Read("Bed depth in mm",ref depth) || !Read("Build height in mm",ref height)) return null;
+        using var joints = new GetOption();
+        joints.SetCommandPrompt("Panel alignment joints");
+        joints.AddOption("Plain"); joints.AddOption("FingerJoints");
+        joints.SetDefaultString("Plain"); joints.AcceptNothing(true);
+        var jointChoice=joints.Get();
+        if (jointChoice!=GetResult.Option && jointChoice!=GetResult.Nothing) return null;
+        bool fingers=jointChoice==GetResult.Option && joints.Option().EnglishName=="FingerJoints";
+        double clearance=defaults.Clearance;
+        if (fingers && RhinoGet.GetNumber("Finger clearance per side in mm",true,ref clearance,.05,.60)
+            is not (Result.Success or Result.Nothing)) return null;
+        return new PreviewSettings(barn,scale,width,depth,height,fingers,clearance);
+    }
+
 }
 
 public sealed class FlatPackExportSTL : Command
