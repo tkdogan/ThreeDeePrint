@@ -21,11 +21,17 @@ Plain glue joints are the default. Finger mode adds rows of 5 mm wide tabs to el
 
 ## Export the reviewed kit
 
-Run **FlatPackExportSTL**, pick one printable mesh in the desired kit, choose an export mode and select a parent folder. **Parts** writes one binary STL per piece under each numbered plate folder. **GroupedPlates** writes one STL per occupied plate with all its pieces in their reviewed positions. The destination is a new **FlatPack-STL** folder. It includes hidden plate layers. You can move or rotate pieces flat inside their plate outline before export. Keep each piece on its plate layer and its base at bed height. Mesh names carry the part IDs between the Rhino preview and the slicer.
+Select the baked meshes you want to print, then run **FlatPackExportSTL**. For a whole plate, use **Select Objects** on its layer. Window selections can include bed outlines and labels. With an empty selection the command prompts you to select parts. **Parts** writes one STL per selected mesh. **GroupedPlates** writes one STL per selected plate containing exactly its selected pieces in their reviewed positions. Selecting parts across kits creates a separate subfolder per kit. The destination is a new **FlatPack-STL** folder. You can move or rotate pieces flat inside their plate outline before export. Keep each piece on its plate layer and its base at bed height. Mesh names carry the part IDs between the Rhino preview and the slicer.
 
 STL stores coordinates without units. Import in **millimetres**. Import a plate’s files together with relative positions preserved to reproduce its Rhino layout. Review thin details and local overhangs in your slicer before printing.
 
 [Open the baked barn preview](Barn-plugin-preview/Preview.3dm) or [browse its exported STLs](Barn-plugin-preview/). This example uses 21 alignment fingers, 0.20 mm clearance per side, and 34 parts on five MK4S plates. Its part IDs match the layers in the preview.
+
+## Export directly for the Prusa MK4S
+
+Select the baked pieces and run **FlatPackExportPrusa**. **Project** writes one editable PrusaSlicer project (`.3mf`) per selected plate. **ProjectAndBGCode** also runs the installed Mac PrusaSlicer and writes the matching binary G-code (`.bgcode`) for the printer. Both modes use the positions on the Rhino plate layers. The project embeds the Original Prusa MK4S high-flow 0.4 mm nozzle, Generic PLA and 0.20 mm STRUCTURAL presets. If your hardware or material differs, open the project, change the preset, and slice again.
+
+[Example PrusaSlicer projects and printer files](Barn-plugin-preview/PrusaSlicer/)
 
 ## Source and build
 

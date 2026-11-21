@@ -106,26 +106,56 @@ public static class Kit
 
     public static string ExportStls(RhinoDoc doc, Guid kitId, string parent, bool groupByPlate)
     {
-        if (!Directory.Exists(parent)) throw new DirectoryNotFoundException(parent);
         var root = doc.Layers.FindId(kitId) ?? throw new ArgumentException("Kit layer no longer exists.");
-        double mm = RhinoMath.UnitScale(doc.ModelUnitSystem,UnitSystem.Millimeters);
-        string staging = Path.Combine(parent,".flatpack-"+Guid.NewGuid().ToString("N"));
+        var parts = doc.Layers.Where(l => !l.IsDeleted && l.ParentLayerId == root.Id)
+            .SelectMany(l => doc.Objects.FindByLayer(l) ?? Array.Empty<RhinoObject>())
+            .Where(o => IsPrintPart(o) && o.Attributes.GetUserString("FlatPack.Kit") == kitId.ToString());
+        return ExportSelection(doc, parts, parent, groupByPlate);
+    }
+
+    internal static bool IsPrintPart(RhinoObject obj) => obj.Geometry is Mesh &&
+        obj.Attributes.GetUserString("FlatPack.Kind") == "Print" &&
+        Guid.TryParse(obj.Attributes.GetUserString("FlatPack.Kit"), out _);
+
+    public static string ExportSelection(RhinoDoc doc, IEnumerable<RhinoObject> selection, string parent, bool groupByPlate)
+        => ExportFiles(doc,selection,parent,groupByPlate,false);
+
+    public static string ExportPrusa(RhinoDoc doc, IEnumerable<RhinoObject> selection, string parent, bool slice = false)
+        => ExportFiles(doc,selection,parent,false,true,slice);
+
+    private static string ExportFiles(RhinoDoc doc, IEnumerable<RhinoObject> selection, string parent, bool groupByPlate, bool prusa, bool slice = false)
+    {
+        if (!Directory.Exists(parent)) throw new DirectoryNotFoundException(parent);
+        var parts = selection.Where(IsPrintPart).DistinctBy(o => o.Id).ToArray();
+        if (parts.Length == 0) throw new ArgumentException("No baked print meshes selected.");
+        bool multipleKits = parts.Select(o => o.Attributes.GetUserString("FlatPack.Kit")).Distinct().Count() > 1;
+        double mm = RhinoMath.UnitScale(doc.ModelUnitSystem, UnitSystem.Millimeters);
+        string staging = Path.Combine(parent, ".flatpack-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
         try
         {
-            int count = 0, plateCount = 0;
-            foreach (var plate in doc.Layers.Where(l => !l.IsDeleted && l.ParentLayerId==kitId))
+            int count = 0;
+            foreach (var group in parts.GroupBy(o => o.Attributes.LayerIndex).OrderBy(g => g.Key))
             {
-                var objects = doc.Objects.FindByLayer(plate) ?? Array.Empty<RhinoObject>();
-                var pieces = objects.Where(o => o.Attributes.GetUserString("FlatPack.Kind")=="Print" &&
-                    o.Attributes.GetUserString("FlatPack.Kit")==kitId.ToString()).OrderBy(o=>o.Attributes.Name).ToArray();
-                if (pieces.Length==0) continue;
-                var bed = objects.SingleOrDefault(o => o.Attributes.GetUserString("FlatPack.Kind")=="Bed") ??
-                    throw new ArgumentException("Missing bed outline on "+plate.FullPath);
+                var plate = doc.Layers[group.Key];
+                var pieces = group.OrderBy(o => o.Attributes.Name).ThenBy(o => o.Id).ToArray();
+                string kit = plate.ParentLayerId.ToString();
+                if (pieces.Any(o => o.Attributes.GetUserString("FlatPack.Kit") != kit))
+                    throw new ArgumentException("Return the selected pieces to their kit's print plate layers.");
+                var bed = doc.Objects.FindByLayer(plate)?.SingleOrDefault(o =>
+                    o.Attributes.GetUserString("FlatPack.Kind") == "Bed" && o.Attributes.GetUserString("FlatPack.Kit") == kit)
+                    ?? throw new ArgumentException("Missing bed outline on " + plate.FullPath);
                 var box = bed.Geometry.GetBoundingBox(true);
-                string folder = Path.Combine(staging,$"Plate-{++plateCount:00}");
+                string directory = multipleKits ? Path.Combine(staging, $"Kit-{doc.Layers.FindId(plate.ParentLayerId).Index}") : staging;
+                Directory.CreateDirectory(directory);
+                // Keep the baked plate number even when earlier plates are unselected.
+                string plateName = plate.Name.StartsWith("Plate ", StringComparison.Ordinal) &&
+                    int.TryParse(plate.Name.Substring(6), out int number) && number > 0
+                    ? $"Plate-{number:00}" : $"Layer-{plate.Index}";
+                string folder = Path.Combine(directory, plateName);
                 using var grouped = groupByPlate ? new Mesh() : null;
-                if (!groupByPlate) Directory.CreateDirectory(folder);
+                var project = prusa ? new PrusaProject() : null;
+                if (!groupByPlate && !prusa) Directory.CreateDirectory(folder);
                 foreach (var obj in pieces)
                 {
                     var mesh = (obj.Geometry as Mesh)?.DuplicateMesh() ?? throw new ArgumentException("Expected a baked mesh.");
@@ -140,14 +170,21 @@ public static class Kit
                         throw new ArgumentException(obj.Name+" is off the bed on "+plate.FullPath);
                     var label = new string((obj.Name ?? "Part").Select(c=>char.IsLetterOrDigit(c)||c=='-'?c:'_').ToArray());
                     count++;
-                    if (grouped != null) grouped.Append(mesh);
+                    if (project != null) project.Add(obj.Name ?? "Part",mesh);
+                    else if (grouped != null) grouped.Append(mesh);
                     else WriteStl(Path.Combine(folder,$"{count:00}-{label}.stl"),mesh);
+                }
+                if (project != null)
+                {
+                    string projectPath = folder+".3mf";
+                    project.Write(projectPath);
+                    if (slice) PrusaProject.Slice(projectPath);
                 }
                 if (grouped != null) WriteStl(folder+".stl",grouped);
             }
-            if (count==0) throw new ArgumentException("The kit has no baked print meshes.");
-            string dest = Path.Combine(parent,"FlatPack-STL");
-            for (int i=2;Directory.Exists(dest)||File.Exists(dest);i++) dest=Path.Combine(parent,$"FlatPack-STL-{i}");
+            string baseName = prusa ? "FlatPack-Prusa" : "FlatPack-STL";
+            string dest = Path.Combine(parent,baseName);
+            for (int i=2;Directory.Exists(dest)||File.Exists(dest);i++) dest=Path.Combine(parent,$"{baseName}-{i}");
             Directory.Move(staging,dest);
             return dest;
         }

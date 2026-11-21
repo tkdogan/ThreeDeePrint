@@ -11,6 +11,7 @@
   <ItemGroup>
     <PackageReference Include="Clipper2" Version="2.0.0" GeneratePathProperty="true" />
     <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
+    <EmbeddedResource Include="Profiles/MK4S.config" LogicalName="ThreeDeePrint.MK4S.config" />
     <None Update="Native/libThreeDeeSolid.dylib;Native/Manifold-LICENSE.txt;Native/Manifold-AUTHORS.txt" TargetPath="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Properties/RiderPreview.py" TargetPath="RiderPreview.py" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Barn_original_with_simplified_interior.3dm" Link="Barn_original_with_simplified_interior.3dm" CopyToOutputDirectory="PreserveNewest" />

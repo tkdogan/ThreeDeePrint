@@ -103,21 +103,58 @@ public sealed class FlatPackPreview : Command
 public sealed class FlatPackExportSTL : Command
 {
     public override string EnglishName => "FlatPackExportSTL";
-    protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+    protected override Result RunCommand(RhinoDoc doc, RunMode mode) => ExportCommand.Run(doc,mode,false);
+}
+
+public sealed class FlatPackExportPrusa : Command
+{
+    public override string EnglishName => "FlatPackExportPrusa";
+    protected override Result RunCommand(RhinoDoc doc, RunMode mode) => ExportCommand.Run(doc,mode,true);
+}
+
+internal static class ExportCommand
+{
+    internal static Result Run(RhinoDoc doc, RunMode mode, bool prusa)
     {
         try
         {
-            var result = RhinoGet.GetOneObject("Pick a baked mesh from the kit to export", false, ObjectType.Mesh, out var part);
-            if (result != Result.Success) return result;
-            string? kitId = part.Object().Attributes.GetUserString("FlatPack.Kit");
-            if (!Guid.TryParse(kitId, out var id)) throw new ArgumentException("Select a mesh from a print plate.");
-            using var format = new GetOption();
-            format.SetCommandPrompt("STL export layout");
-            format.AddOption("Parts"); format.AddOption("GroupedPlates");
-            format.SetDefaultString("Parts"); format.AcceptNothing(true);
-            var answer = format.Get();
-            if (answer != GetResult.Option && answer != GetResult.Nothing) return format.CommandResult();
-            bool grouped = answer == GetResult.Option && format.Option().EnglishName == "GroupedPlates";
+            var selection = doc.Objects.GetSelectedObjects(false, false).ToArray();
+            if (selection.Length == 0)
+            {
+                using var picker = new GetObject();
+                picker.SetCommandPrompt("Select baked parts to print, then press Enter");
+                picker.GeometryFilter = ObjectType.Mesh;
+                picker.SubObjectSelect = false;
+                picker.SetCustomGeometryFilter((obj, _, _) => Kit.IsPrintPart(obj));
+                picker.GetMultiple(1, 0);
+                if (picker.CommandResult() != Result.Success) return picker.CommandResult();
+                selection = picker.Objects().Select(r => r.Object()).ToArray();
+            }
+            var parts = selection.Where(Kit.IsPrintPart).ToArray();
+            if (parts.Length == 0) throw new ArgumentException("Select printable meshes on the baked Plate layers.");
+            int plateCount = parts.Select(o => o.Attributes.LayerIndex).Distinct().Count();
+            RhinoApp.WriteLine($"Selected {parts.Length} printable pieces on {plateCount} plates.");
+            bool grouped = false, slice = false;
+            if (!prusa)
+            {
+                using var format = new GetOption();
+                format.SetCommandPrompt("STL export layout");
+                format.AddOption("Parts"); format.AddOption("GroupedPlates");
+                format.SetDefaultString("Parts"); format.AcceptNothing(true);
+                var answer = format.Get();
+                if (answer != GetResult.Option && answer != GetResult.Nothing) return format.CommandResult();
+                grouped = answer == GetResult.Option && format.Option().EnglishName == "GroupedPlates";
+            }
+            else
+            {
+                using var output = new GetOption();
+                output.SetCommandPrompt("MK4S HF 0.4 mm nozzle, Generic PLA, 0.20 mm Structural — export");
+                output.AddOption("Project"); output.AddOption("ProjectAndBGCode");
+                output.SetDefaultString("Project"); output.AcceptNothing(true);
+                var answer = output.Get();
+                if (answer != GetResult.Option && answer != GetResult.Nothing) return output.CommandResult();
+                slice = answer == GetResult.Option && output.Option().EnglishName == "ProjectAndBGCode";
+            }
             string path = "";
             if (mode == RunMode.Scripted)
             {
@@ -125,13 +162,14 @@ public sealed class FlatPackExportSTL : Command
             }
             else
             {
-                using var dialog = new Eto.Forms.SelectFolderDialog { Title = "Choose a folder for the STL kit" };
+                using var dialog = new Eto.Forms.SelectFolderDialog { Title = prusa ? "Choose a folder for the PrusaSlicer projects" : "Choose a folder for the STL kit" };
                 if (dialog.ShowDialog(Rhino.UI.RhinoEtoApp.MainWindow) != Eto.Forms.DialogResult.Ok) return Result.Cancel;
                 path = dialog.Directory;
             }
-            RhinoApp.WriteLine("Wrote STL files to " + Kit.ExportStls(doc, id, path, grouped));
+            var destination = prusa ? Kit.ExportPrusa(doc, parts, path, slice) : Kit.ExportSelection(doc, parts, path, grouped);
+            RhinoApp.WriteLine("Exported to " + destination);
             return Result.Success;
         }
-        catch (Exception e) { RhinoApp.WriteLine("FlatPackExportSTL: " + e.Message); return Result.Failure; }
+        catch (Exception e) { RhinoApp.WriteLine(e.Message); return Result.Failure; }
     }
 }
