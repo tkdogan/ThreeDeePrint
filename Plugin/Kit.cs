@@ -19,12 +19,12 @@ public static class Kit
         => BakeWithJoints(doc, objects, scale, width, depth, height, barn, false);
 
     public static Layer BakeWithJoints(RhinoDoc doc, RhinoObject[] objects, double scale, double width, double depth, double height, bool barn, bool fingers)
-        => BakeSettings(doc,objects,new PreviewSettings(barn,scale,width,depth,height,fingers,.20));
+        => BakeSettings(doc,objects,new PreviewSettings(scale,width,depth,height,fingers,.20),barn);
 
-    internal static Layer BakeSettings(RhinoDoc doc, RhinoObject[] objects, PreviewSettings settings)
+    internal static Layer BakeSettings(RhinoDoc doc, RhinoObject[] objects, PreviewSettings settings, bool barn = false)
     {
-        var (barn,scale,width,depth,height,fingers,clearance) = settings;
-        if (objects.Length==0) throw new ArgumentException("No components found. Use Select for other models.");
+        var (scale,width,depth,height,fingers,clearance) = settings;
+        if (objects.Length==0) throw new ArgumentException("No printable components selected.");
         if (!(scale>0 && width>6 && depth>6 && height>0)) throw new ArgumentException("Invalid scale or build volume.");
         if (doc.ModelUnitSystem is UnitSystem.None or UnitSystem.CustomUnits or UnitSystem.Unset)
             throw new ArgumentException("Set the document's physical units first.");

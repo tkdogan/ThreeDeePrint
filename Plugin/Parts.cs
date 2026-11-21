@@ -49,9 +49,11 @@ internal static class Parts
             _ => throw new ArgumentException("Select a solid Brep, extrusion or closed mesh.")
         };
         b.Transform(Transform.Scale(Point3d.Origin, factor));
-        if (!b.IsSolid && barn && (obj.Attributes.Name is "Simplified - west wall" or "Simplified - north wall"))
+        if (!b.IsSolid && obj.Geometry is Brep panel &&
+            obj.Attributes.Name is ("Simplified - west wall" or "Simplified - north wall") &&
+            (barn || obj.Document.Layers[obj.Attributes.LayerIndex].FullPath == "COMPARE - Simplified full size::Walls"))
         {
-            b = RecoverPanel((Brep)obj.Geometry,factor);
+            b = RecoverPanel(panel,factor);
         }
         if (b == null || !b.IsValid || !b.IsSolid) throw new ArgumentException("Component must enclose a valid solid.");
         if (b.SolidOrientation == BrepSolidOrientation.Inward) b.Flip();

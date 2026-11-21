@@ -40,11 +40,19 @@ public sealed class FlatPackPreview : Command
     {
         try
         {
-            var barnObjects = Kit.BarnObjects(doc);
+            using var picker = new GetObject();
+            picker.SetCommandPrompt("Select components to print, then press Enter");
+            picker.GeometryFilter = ObjectType.Brep | ObjectType.Extrusion | ObjectType.Mesh;
+            picker.SubObjectSelect = false;
+            picker.EnablePreSelect(false, true);
+            picker.GetMultiple(1, 0);
+            if (picker.CommandResult() != Result.Success) return picker.CommandResult();
+            var inputs = picker.Objects().Select(r => r.Object()).ToArray();
+
             PreviewSettings settings;
             if (mode == RunMode.Interactive)
             {
-                using var dialog = new PreviewDialog(barnObjects.Length>0,previous);
+                using var dialog = new PreviewDialog(previous);
                 if (!dialog.ShowModal(Rhino.UI.RhinoEtoApp.MainWindow)) return Result.Cancel;
                 settings = dialog.Values;
             }
@@ -53,14 +61,6 @@ public sealed class FlatPackPreview : Command
                 var scripted = ReadSettings();
                 if (scripted==null) return Result.Cancel;
                 settings = scripted;
-            }
-            var inputs = barnObjects;
-            if (!settings.Barn)
-            {
-                var result = RhinoGet.GetMultipleObjects("Select individual printable components",false,
-                    ObjectType.Brep | ObjectType.Extrusion | ObjectType.Mesh,out var refs);
-                if (result!=Result.Success) return result;
-                inputs = refs.Select(r=>r.Object()).ToArray();
             }
             var root = Kit.BakeSettings(doc,inputs,settings);
             previous = settings;
@@ -72,13 +72,6 @@ public sealed class FlatPackPreview : Command
 
     private static PreviewSettings? ReadSettings()
     {
-        using var prompt = new GetOption();
-        prompt.SetCommandPrompt("Source components");
-        prompt.AddOption("Barn"); prompt.AddOption("Select");
-        prompt.SetDefaultString("Barn"); prompt.AcceptNothing(true);
-        var answer = prompt.Get();
-        if (answer!=GetResult.Option && answer!=GetResult.Nothing) return null;
-        bool barn = answer==GetResult.Nothing || prompt.Option().EnglishName=="Barn";
         var defaults = PreviewSettings.Defaults;
         double scale=defaults.Scale,width=defaults.Width,depth=defaults.Depth,height=defaults.Height;
         bool Read(string label, ref double value) =>
@@ -95,7 +88,7 @@ public sealed class FlatPackPreview : Command
         double clearance=defaults.Clearance;
         if (fingers && RhinoGet.GetNumber("Finger clearance per side in mm",true,ref clearance,.05,.60)
             is not (Result.Success or Result.Nothing)) return null;
-        return new PreviewSettings(barn,scale,width,depth,height,fingers,clearance);
+        return new PreviewSettings(scale,width,depth,height,fingers,clearance);
     }
 
 }

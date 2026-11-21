@@ -10,7 +10,7 @@ Open [ThreeDeePrint.sln](ThreeDeePrint.sln) in Rider. Quit any running Rhino 8 s
 
 ## Bake and review
 
-1. Open the barn source file in Rhino and run **FlatPackPreview**. In the settings dialog, choose **Simplified barn layers** or **Select components in Rhino**.
+1. Run **FlatPackPreview** in Rhino. Select the wall, slab, or other component objects to print and press **Enter** to open the settings dialog. Only the selected components go into this kit.
 2. Set the scale denominator and build volume. To add alignment joints, enable **Add wall-to-slab fingers** and choose the **clearance per side** in millimetres. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints.
 3. Expand **3D Printer → Kit 01** in Layers. Each **Plate** layer contains its bed outline, label and numbered meshes at physical print size. The viewport zooms to the plates. Toggle the plate layers to inspect them individually. Turn on **Assembly reference**, select its objects and use Zoom Selected to see the numbered pieces in their assembled positions. The original building stays in the document.
 4. Save the Rhino document to keep the preview. Each new bake creates a separate numbered kit. Preview creates no STL files.
