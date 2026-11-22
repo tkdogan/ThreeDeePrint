@@ -6,6 +6,7 @@ using Rhino.Input;
 using Rhino.Input.Custom;
 using Rhino.PlugIns;
 
+[assembly: PlugInDescription(DescriptionType.Icon, "Go2Bed.Icon.ico")]
 [assembly: Guid("09D603C7-8651-4969-B62B-C8EA8CCDBE54")]
 namespace ThreeDeePrint;
 
@@ -66,14 +67,18 @@ public sealed class FlatPackPreview : Command
         using var joints = new GetOption();
         joints.SetCommandPrompt("Panel alignment joints");
         joints.AddOption("Plain"); joints.AddOption("FingerJoints");
+        var sourceColors = new OptionToggle(defaults.UseSourceColors,"Off","On");
+        int colorOption = joints.AddOptionToggle("SourceColors",ref sourceColors);
         joints.SetDefaultString("Plain"); joints.AcceptNothing(true);
-        var jointChoice=joints.Get();
+        GetResult jointChoice;
+        do { jointChoice = joints.Get(); }
+        while (jointChoice == GetResult.Option && joints.OptionIndex() == colorOption);
         if (jointChoice!=GetResult.Option && jointChoice!=GetResult.Nothing) return null;
         bool fingers=jointChoice==GetResult.Option && joints.Option().EnglishName=="FingerJoints";
         double clearance=defaults.Clearance;
         if (fingers && RhinoGet.GetNumber("Finger clearance per side in mm",true,ref clearance,.05,.60)
             is not (Result.Success or Result.Nothing)) return null;
-        return new PreviewSettings(scale,width,depth,height,fingers,clearance);
+        return new PreviewSettings(scale,width,depth,height,fingers,clearance,sourceColors.CurrentValue);
     }
 
 }

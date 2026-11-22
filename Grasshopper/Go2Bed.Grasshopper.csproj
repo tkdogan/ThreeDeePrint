@@ -15,6 +15,7 @@
     <PackageDownload Include="Grasshopper" Version="[$(GrasshopperVersion)]" />
     <Reference Include="Grasshopper" HintPath="$(NuGetPackageRoot)/grasshopper/$(GrasshopperVersion)/lib/net7.0/Grasshopper.dll" Private="false" />
     <Reference Include="GH_IO" HintPath="$(NuGetPackageRoot)/grasshopper/$(GrasshopperVersion)/lib/net7.0/GH_IO.dll" Private="false" />
+    <EmbeddedResource Include="../brand/icons/flat-pack-24.png" LogicalName="Go2Bed.FlatPack.png" />
     <EmbeddedResource Include="../brand/go2bed-24.png" LogicalName="Go2Bed.Icon.png" />
   </ItemGroup>
 </Project>

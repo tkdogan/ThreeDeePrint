@@ -23,7 +23,7 @@ internal static class PrintLayout
     }
 
     internal static Layer Bake(RhinoDoc doc, List<Placement> layout, double width, double depth,
-        BoundingBox placementBounds, List<Guid>? bakedIds = null)
+        BoundingBox placementBounds, bool useSourceColors, List<Guid>? bakedIds = null)
     {
         double mm = RhinoMath.UnitScale(doc.ModelUnitSystem,UnitSystem.Millimeters);
         var addedLayers = new List<int>();
@@ -34,9 +34,14 @@ internal static class PrintLayout
             if (idx<0) throw new IOException("Could not add layer "+name);
             addedLayers.Add(idx); return doc.Layers[idx];
         }
-        void Add(GeometryBase geometry,Layer l,string name,string kind,Guid kit,Guid source=default)
+        void Add(GeometryBase geometry,Layer l,string name,string kind,Guid kit,Guid source=default,Color? color=null)
         {
             var attr = new ObjectAttributes {LayerIndex=l.Index,Name=name};
+            if (color is Color objectColor && !objectColor.IsEmpty)
+            {
+                attr.ColorSource = ObjectColorSource.ColorFromObject;
+                attr.ObjectColor = objectColor;
+            }
             attr.SetUserString("FlatPack.Kit",kit.ToString());
             attr.SetUserString("FlatPack.Kind",kind);
             if (source!=Guid.Empty) attr.SetUserString("FlatPack.Source",source.ToString());
@@ -74,11 +79,14 @@ internal static class PrintLayout
                     visible.Union(outline.GetBoundingBox(true));
                 }
                 string name = $"P{++sequence:00} {entry.Part.Name}";
+                var sourceId = entry.Part.Source;
+                var source = useSourceColors && sourceId != Guid.Empty ? doc.Objects.FindId(sourceId) : null;
+                var color = source?.Attributes.DrawColor(doc);
                 var printable = entry.Placed.DuplicateMesh(); printable.Scale(1/mm); printable.Translate(origin-Point3d.Origin);
-                Add(printable,plate,name,"Print",root.Id,entry.Part.Source);
+                Add(printable,plate,name,"Print",root.Id,sourceId,color);
                 visible.Union(printable.GetBoundingBox(true));
                 var assembled = entry.Part.Assembled.DuplicateMesh(); assembled.Scale(1/mm);
-                Add(assembled,assembly,name,"Reference",root.Id,entry.Part.Source);
+                Add(assembled,assembly,name,"Reference",root.Id,sourceId,color);
             }
             doc.Views.ActiveView?.ActiveViewport.ZoomBoundingBox(visible);
             doc.Views.Redraw();

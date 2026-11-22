@@ -35,6 +35,8 @@ The outputs give packed meshes, matching part names and bed outlines. Each tree 
 
 Go2Bed keeps existing object names. For unnamed objects, it numbers parts by their Rhino layer, such as `Walls 01` and `Walls 02`. Geometry without a source layer gets names such as `Part 01`. The same name and piece ID appear on the baked plate and assembly meshes, in the Grasshopper names output, and in individual STL and PrusaSlicer exports.
 
+**Use source colors** is on by default in the Rhino preview dialog and the Grasshopper component. When you bake, the plate and assembly meshes copy their source object's Rhino display color, including color inherited from its layer. Turn the setting off to use the kit's layer colors. Grasshopper geometry without a Rhino source uses the kit's layer colors.
+
 ### Alignment joints
 
 Plain glue joints are the default. Finger mode adds rows of 5 mm wide tabs to eligible lower panel edges and cuts matching blind sockets in the horizontal slab underneath. The tabs enter vertically during assembly. The default 0.20 mm clearance on each side makes a 5.40 mm socket for a 5 mm finger. The same allowance applies at the tip. Short edges, thin slabs, openings and contacts blocked by another part can limit where joints are placed. Rhino reports the number of completed pairs. Roof seams and wall-to-wall corners retain their trimmed glue faces.
@@ -55,7 +57,7 @@ Select the baked pieces and run **FlatPackExportPrusa**. **Project** writes one 
 
 ## Source and build
 
-Run [packaging/build-mac.sh](packaging/build-mac.sh) to build both plug-ins and generate the Yak distribution under `dist`. The [Go2Bed icon](brand/go2bed-gable.png) shows a gable on a build plate. The [alternate icon](brand/go2bed-joint.png) shows two interlocking walls.
+Run [packaging/build-mac.sh](packaging/build-mac.sh) to build both plug-ins and generate the Yak distribution under `dist`. The [Go2Bed icon set](brand/go2bed-icon-set.png) uses interlocking walls for the package and Grasshopper category, and separated panels for the Flat Pack component. In Rhino, open the **Go2Bed** toolbar for Preview, Export STL and Export for Prusa. The package includes the [Rhino toolbar file](Plugin/ThreeDeePrint.rui).
 
 Build [ThreeDeePrint.csproj](Plugin/ThreeDeePrint.csproj) using `dotnet build Plugin -c Release`. The build produces the managed RHP under `Plugin/bin/Release/net7.0` and the Mac installer under `dist`.
 

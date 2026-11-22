@@ -16,11 +16,20 @@ public sealed class Go2BedInfo : GH_AssemblyInfo
     public override string AuthorName => "Timur Dogan";
     public override string Description => "Prepare flat-packed architectural models for printing.";
     public override Bitmap Icon => LoadIcon();
-    internal static Bitmap LoadIcon()
+    internal static Bitmap LoadIcon(string resource = "Go2Bed.Icon.png")
     {
-        using var stream = typeof(Go2BedInfo).Assembly.GetManifestResourceStream("Go2Bed.Icon.png");
+        using var stream = typeof(Go2BedInfo).Assembly.GetManifestResourceStream(resource);
         using var image = new Bitmap(stream!);
         return new Bitmap(image);
+    }
+}
+
+public sealed class Go2BedPriority : GH_AssemblyPriority
+{
+    public override GH_LoadingInstruction PriorityLoad()
+    {
+        global::Grasshopper.Instances.ComponentServer.AddCategoryIcon("Go2Bed", Go2BedInfo.LoadIcon());
+        return GH_LoadingInstruction.Proceed;
     }
 }
 
@@ -29,13 +38,14 @@ public sealed class FlatPackComponent : GH_Component
     private List<Placement>? solved;
     private BoundingBox sourceBounds;
     private double width, depth;
+    private bool useSourceColors;
     private uint documentId;
     private UnitSystem units;
     public FlatPackComponent() : base("Flat Pack","FlatPack",
         "Trim and orient components, then pack them onto build plates. Bake this component to create an exportable Rhino kit.",
         "Go2Bed","Print") { }
     public override Guid ComponentGuid => new("CE19F9B4-B880-4903-ADF8-F47892485583");
-    protected override Bitmap Icon => Go2BedInfo.LoadIcon();
+    protected override Bitmap Icon => Go2BedInfo.LoadIcon("Go2Bed.FlatPack.png");
 
     protected override void RegisterInputParams(GH_InputParamManager p)
     {
@@ -47,6 +57,8 @@ public sealed class FlatPackComponent : GH_Component
         p.AddNumberParameter("Build height","H","Maximum height in mm.",GH_ParamAccess.item,220);
         p.AddBooleanParameter("Finger joints","J","Add alignment fingers to eligible wall-to-slab joints.",GH_ParamAccess.item,false);
         p.AddNumberParameter("Clearance","C","Finger clearance per side in mm.",GH_ParamAccess.item,.20);
+        int colors = p.AddBooleanParameter("Use source colors","SC","Copy the Rhino source colors to the plate and assembly meshes when baking.",GH_ParamAccess.item,true);
+        p[colors].Optional = true;
     }
     protected override void RegisterOutputParams(GH_OutputParamManager p)
     {
@@ -71,6 +83,9 @@ public sealed class FlatPackComponent : GH_Component
         bool fingers=false;
         if (!da.GetDataList(0,geometry) || !da.GetData(1,ref scale) || !da.GetData(2,ref width) ||
             !da.GetData(3,ref depth) || !da.GetData(4,ref height) || !da.GetData(5,ref fingers) || !da.GetData(6,ref clearance)) return;
+        useSourceColors = true;
+        // Older Grasshopper definitions can load without the new optional input.
+        if (Params.Input.Count > 7) da.GetData(7,ref useSourceColors);
         try
         {
             var doc = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("Open a Rhino model first.");
@@ -115,6 +130,6 @@ public sealed class FlatPackComponent : GH_Component
         if (solved == null) return;
         if (doc.RuntimeSerialNumber!=documentId || doc.ModelUnitSystem!=units)
         { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,"Recompute in the destination document before baking."); return; }
-        PrintLayout.Bake(doc,solved,width,depth,sourceBounds,ids);
+        PrintLayout.Bake(doc,solved,width,depth,sourceBounds,useSourceColors,ids);
     }
 }

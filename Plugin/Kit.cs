@@ -16,12 +16,12 @@ public static class Kit
 
     internal static Layer BakeSettings(RhinoDoc doc, RhinoObject[] objects, PreviewSettings settings, bool barn = false)
     {
-        var (scale,width,depth,height,fingers,clearance) = settings;
+        var (scale,width,depth,height,fingers,clearance,useSourceColors) = settings;
         var sources = objects.Select(o => SourcePart.FromObject(o,barn));
         var layout = PrintLayout.Solve(sources,doc.ModelUnitSystem,scale,width,depth,height,fingers,clearance);
         var bounds = BoundingBox.Empty;
         foreach (var obj in objects) bounds.Union(obj.Geometry.GetBoundingBox(true));
-        return PrintLayout.Bake(doc,layout,width,depth,bounds);
+        return PrintLayout.Bake(doc,layout,width,depth,bounds,useSourceColors);
     }
 
     public static string Export(RhinoDoc doc, Guid kitId, string parent)
