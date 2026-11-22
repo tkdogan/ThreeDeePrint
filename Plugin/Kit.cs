@@ -17,81 +17,11 @@ public static class Kit
     internal static Layer BakeSettings(RhinoDoc doc, RhinoObject[] objects, PreviewSettings settings, bool barn = false)
     {
         var (scale,width,depth,height,fingers,clearance) = settings;
-        if (objects.Length==0) throw new ArgumentException("No printable components selected.");
-        if (!(scale>0 && width>6 && depth>6 && height>0)) throw new ArgumentException("Invalid scale or build volume.");
-        if (doc.ModelUnitSystem is UnitSystem.None or UnitSystem.CustomUnits or UnitSystem.Unset)
-            throw new ArgumentException("Set the document's physical units first.");
-        double mm = RhinoMath.UnitScale(doc.ModelUnitSystem,UnitSystem.Millimeters);
-        var parts = Parts.Prepare(objects,mm/scale,width-2*PlatePacking.Margin,depth-2*PlatePacking.Margin,barn,fingers,clearance);
-        var layout = PlatePacking.Pack(parts,width,depth,height);
-        if (layout.Count==0) throw new ArgumentException("No printable pieces at this scale.");
-        var addedLayers = new List<int>();
-        var addedObjects = new List<Guid>();
-        Layer AddLayer(string name, Guid parent, Color color, bool visible=true)
-        {
-            int idx = doc.Layers.Add(new Layer {Name=name,ParentLayerId=parent,Color=color,IsVisible=visible});
-            if (idx<0) throw new IOException("Could not add layer "+name);
-            addedLayers.Add(idx); return doc.Layers[idx];
-        }
-        void Add(GeometryBase geometry,Layer l,string name,string kind,Guid kit,Guid source=default)
-        {
-            var attr = new ObjectAttributes {LayerIndex=l.Index,Name=name};
-            attr.SetUserString("FlatPack.Kit",kit.ToString());
-            attr.SetUserString("FlatPack.Kind",kind);
-            if (source!=Guid.Empty) attr.SetUserString("FlatPack.Source",source.ToString());
-            var id = doc.Objects.Add(geometry,attr);
-            if (id==Guid.Empty) throw new IOException("Could not bake "+name);
-            addedObjects.Add(id);
-        }
-
-        try
-        {
-            var top = doc.Layers.FirstOrDefault(l => !l.IsDeleted && l.FullPath=="3D Printer") ??
-                AddLayer("3D Printer",Guid.Empty,Color.Teal);
-            int number = 1;
-            while (doc.Layers.Any(l=>!l.IsDeleted && l.ParentLayerId==top.Id && l.Name==$"Kit {number:00}")) number++;
-            string kitName = $"Kit {number:00}";
-            var root = AddLayer(kitName,top.Id,Color.Teal);
-            var assembly = AddLayer("Assembly reference",root.Id,Color.SlateGray,false);
-            var placementBounds = BoundingBox.Empty;
-            foreach (var o in objects) placementBounds.Union(o.Geometry.GetBoundingBox(true));
-            foreach (var o in doc.Objects.GetObjectList(ObjectType.Curve).Where(o => o.Attributes.GetUserString("FlatPack.Kind")=="Bed"))
-                placementBounds.Union(o.Geometry.GetBoundingBox(true));
-            var start = new Point3d(placementBounds.Max.X+15/mm,placementBounds.Min.Y,0);
-            var visible = BoundingBox.Empty;
-            var placedParts = new Dictionary<int,Layer>();
-            int sequence = 0;
-            foreach (var entry in layout)
-            {
-                var origin = start + new Vector3d((entry.Plate-1)*(width+15)/mm,0,0);
-                if (!placedParts.TryGetValue(entry.Plate,out var plate))
-                {
-                    plate = AddLayer($"Plate {entry.Plate:00}",root.Id,Color.FromArgb(31,130,125));
-                    placedParts.Add(entry.Plate,plate);
-                    var outline = new Rectangle3d(new Plane(origin,Vector3d.ZAxis),width/mm,depth/mm).ToNurbsCurve();
-                    Add(outline,plate,"Build plate outline","Bed",root.Id);
-                    var tag = new TextDot(plate.Name,origin-new Vector3d(0,5/mm,0));
-                    Add(tag,plate,"Plate label","Label",root.Id);
-                    visible.Union(outline.GetBoundingBox(true));
-                }
-                string name = $"P{++sequence:00} {entry.Part.Name}";
-                var printable = entry.Placed.DuplicateMesh(); printable.Scale(1/mm); printable.Translate(origin-Point3d.Origin);
-                Add(printable,plate,name,"Print",root.Id,entry.Part.Source);
-                visible.Union(printable.GetBoundingBox(true));
-                var assembled = entry.Part.Assembled.DuplicateMesh(); assembled.Scale(1/mm);
-                Add(assembled,assembly,name,"Reference",root.Id,entry.Part.Source);
-            }
-            doc.Views.ActiveView?.ActiveViewport.ZoomBoundingBox(visible);
-            doc.Views.Redraw();
-            RhinoApp.WriteLine($"{layout.Count} printable parts on {placedParts.Count} plates.");
-            return root;
-        }
-        catch
-        {
-            foreach (var id in addedObjects) doc.Objects.Delete(id,true);
-            foreach (int i in addedLayers.AsEnumerable().Reverse()) doc.Layers.Delete(i,true);
-            throw;
-        }
+        var sources = objects.Select(o => SourcePart.FromObject(o,barn));
+        var layout = PrintLayout.Solve(sources,doc.ModelUnitSystem,scale,width,depth,height,fingers,clearance);
+        var bounds = BoundingBox.Empty;
+        foreach (var obj in objects) bounds.Union(obj.Geometry.GetBoundingBox(true));
+        return PrintLayout.Bake(doc,layout,width,depth,bounds);
     }
 
     public static string Export(RhinoDoc doc, Guid kitId, string parent)

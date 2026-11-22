@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <TargetExt>.gha</TargetExt>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <GrasshopperVersion>8.21.25188.17001</GrasshopperVersion>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Go2Bed.Core.csproj" />
+    <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
+    <!-- Use the SDK reference assemblies without importing its Windows desktop framework. -->
+    <PackageDownload Include="Grasshopper" Version="[$(GrasshopperVersion)]" />
+    <Reference Include="Grasshopper" HintPath="$(NuGetPackageRoot)/grasshopper/$(GrasshopperVersion)/lib/net7.0/Grasshopper.dll" Private="false" />
+    <Reference Include="GH_IO" HintPath="$(NuGetPackageRoot)/grasshopper/$(GrasshopperVersion)/lib/net7.0/GH_IO.dll" Private="false" />
+    <EmbeddedResource Include="../brand/go2bed-24.png" LogicalName="Go2Bed.Icon.png" />
+  </ItemGroup>
+</Project>

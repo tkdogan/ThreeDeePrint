@@ -1,0 +1,12 @@
+name: Go2Bed
+version: 1.0.0
+authors:
+  - Timur Dogan
+description: Prepare architectural models as flat-packed print kits in Rhino and Grasshopper. Review packed plates in Rhino and export STL or PrusaSlicer projects.
+url: https://github.com/tkdogan/ThreeDeePrint
+keywords:
+  - architecture
+  - 3d-printing
+  - fabrication
+  - grasshopper
+icon: icon.png

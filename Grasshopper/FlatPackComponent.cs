@@ -1,0 +1,120 @@
+using System.Drawing;
+using Grasshopper.Kernel;
+using Grasshopper.Kernel.Data;
+using Grasshopper.Kernel.Types;
+using Rhino;
+using Rhino.DocObjects;
+using Rhino.Geometry;
+using ThreeDeePrint;
+
+namespace Go2Bed.Grasshopper;
+
+public sealed class Go2BedInfo : GH_AssemblyInfo
+{
+    public override string Name => "Go2Bed";
+    public override Guid Id => new("CC798366-ADBD-43B4-AD58-539BFCFD4BFC");
+    public override string AuthorName => "Timur Dogan";
+    public override string Description => "Prepare flat-packed architectural models for printing.";
+    public override Bitmap Icon => LoadIcon();
+    internal static Bitmap LoadIcon()
+    {
+        using var stream = typeof(Go2BedInfo).Assembly.GetManifestResourceStream("Go2Bed.Icon.png");
+        using var image = new Bitmap(stream!);
+        return new Bitmap(image);
+    }
+}
+
+public sealed class FlatPackComponent : GH_Component
+{
+    private List<Placement>? solved;
+    private BoundingBox sourceBounds;
+    private double width, depth;
+    private uint documentId;
+    private UnitSystem units;
+    public FlatPackComponent() : base("Flat Pack","FlatPack",
+        "Trim and orient components, then pack them onto build plates. Bake this component to create an exportable Rhino kit.",
+        "Go2Bed","Print") { }
+    public override Guid ComponentGuid => new("CE19F9B4-B880-4903-ADF8-F47892485583");
+    protected override Bitmap Icon => Go2BedInfo.LoadIcon();
+
+    protected override void RegisterInputParams(GH_InputParamManager p)
+    {
+        p.AddGeometryParameter("Components","G","Separate solid Breps, extrusions or closed meshes in Rhino document units.",GH_ParamAccess.list);
+        p[0].DataMapping = GH_DataMapping.Flatten;
+        p.AddNumberParameter("Scale","S","Scale denominator (50 means 1:50).",GH_ParamAccess.item,50);
+        p.AddNumberParameter("Bed width","W","Bed width in mm.",GH_ParamAccess.item,250);
+        p.AddNumberParameter("Bed depth","D","Bed depth in mm.",GH_ParamAccess.item,210);
+        p.AddNumberParameter("Build height","H","Maximum height in mm.",GH_ParamAccess.item,220);
+        p.AddBooleanParameter("Finger joints","J","Add alignment fingers to eligible wall-to-slab joints.",GH_ParamAccess.item,false);
+        p.AddNumberParameter("Clearance","C","Finger clearance per side in mm.",GH_ParamAccess.item,.20);
+    }
+    protected override void RegisterOutputParams(GH_OutputParamManager p)
+    {
+        p.AddMeshParameter("Packed parts","P","Meshes in Rhino units, one branch per plate. Bake the component to retain the kit metadata.",GH_ParamAccess.tree);
+        p.AddTextParameter("Part names","N","Part IDs and names matching the mesh tree.",GH_ParamAccess.tree);
+        p.AddCurveParameter("Beds","B","Bed outlines matching the plate branches.",GH_ParamAccess.tree);
+    }
+
+    // An input tree can trigger several solves. Keep the inputs as one set so Bake
+    // always corresponds to the entire visible kit.
+    protected override void BeforeSolveInstance() { solved = null; }
+    protected override void SolveInstance(IGH_DataAccess da)
+    {
+        if (da.Iteration > 0)
+        {
+            solved = null;
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,"Flatten Components and supply one value per setting to bake one kit.");
+            return;
+        }
+        var geometry = new List<IGH_GeometricGoo>();
+        double scale=50, height=220, clearance=.2;
+        bool fingers=false;
+        if (!da.GetDataList(0,geometry) || !da.GetData(1,ref scale) || !da.GetData(2,ref width) ||
+            !da.GetData(3,ref depth) || !da.GetData(4,ref height) || !da.GetData(5,ref fingers) || !da.GetData(6,ref clearance)) return;
+        try
+        {
+            var doc = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("Open a Rhino model first.");
+            documentId = doc.RuntimeSerialNumber;
+            units = doc.ModelUnitSystem;
+            sourceBounds = BoundingBox.Empty;
+            var sources = new List<SourcePart>();
+            foreach (var item in geometry)
+            {
+                if (item?.ScriptVariable() is not GeometryBase g) throw new ArgumentException("Supply solid geometry.");
+                var obj = item.IsReferencedGeometry ? doc.Objects.FindId(item.ReferenceID) : null;
+                sources.Add(obj == null ? new SourcePart(g,null,Guid.Empty) : SourcePart.FromObject(obj) with { Geometry=g });
+                sourceBounds.Union(g.GetBoundingBox(true));
+            }
+            var layout = PrintLayout.Solve(sources,units,scale,width,depth,height,fingers,clearance);
+            var meshes = new GH_Structure<GH_Mesh>();
+            var names = new GH_Structure<GH_String>();
+            var beds = new GH_Structure<GH_Curve>();
+            double u = RhinoMath.UnitScale(UnitSystem.Millimeters,units);
+            for (int i=0;i<layout.Count;i++)
+            {
+                var entry=layout[i];
+                var path=new GH_Path(entry.Plate-1);
+                var origin=new Point3d((entry.Plate-1)*(width+15)*u,0,0);
+                if (!beds.PathExists(path))
+                    beds.Append(new GH_Curve(new Rectangle3d(new Plane(origin,Vector3d.ZAxis),width*u,depth*u).ToNurbsCurve()),path);
+                var mesh=entry.Placed.DuplicateMesh();
+                mesh.Scale(u);
+                mesh.Translate(origin-Point3d.Origin);
+                meshes.Append(new GH_Mesh(mesh),path);
+                names.Append(new GH_String($"P{i+1:00} {entry.Part.Name}"),path);
+            }
+            da.SetDataTree(0,meshes); da.SetDataTree(1,names); da.SetDataTree(2,beds);
+            solved = layout;
+        }
+        catch (Exception e) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,e.Message); }
+    }
+    public override bool IsBakeCapable => solved != null;
+    public override void BakeGeometry(RhinoDoc doc, List<Guid> ids) => BakeGeometry(doc,null,ids);
+    public override void BakeGeometry(RhinoDoc doc, ObjectAttributes? attributes, List<Guid> ids)
+    {
+        if (solved == null) return;
+        if (doc.RuntimeSerialNumber!=documentId || doc.ModelUnitSystem!=units)
+        { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,"Recompute in the destination document before baking."); return; }
+        PrintLayout.Bake(doc,solved,width,depth,sourceBounds,ids);
+    }
+}

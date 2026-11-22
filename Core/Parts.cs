@@ -5,18 +5,28 @@ using Rhino.Geometry;
 
 namespace ThreeDeePrint;
 
+internal record SourcePart(GeometryBase Geometry, string? Name, Guid Id, bool RepairBarnPanel = false, string? LayerName = null)
+{
+    internal static SourcePart FromObject(RhinoObject obj, bool barn = false)
+    {
+        var layer = obj.Document.Layers[obj.Attributes.LayerIndex];
+        return new SourcePart(obj.Geometry, obj.Attributes.Name, obj.Id,
+            barn || layer.FullPath == "COMPARE - Simplified full size::Walls", layer.Name);
+    }
+}
+
 internal record Part(string Name, Guid Source, Mesh Assembled, Mesh Flat);
 internal record Component(string Name, Guid Source, Brep Solid);
 internal static class Parts
 {
     private const double Tol = .001; // All geometry here is at print scale, in millimetres.
-    public static IEnumerable<Part> Prepare(IEnumerable<RhinoObject> objects, double factor, double width, double depth, bool barn, bool fingers, double clearance)
+    public static IEnumerable<Part> Prepare(IEnumerable<SourcePart> objects, double factor, double width, double depth, bool fingers, double clearance)
     {
         var components = new List<Component>();
-        foreach (var obj in objects.OrderBy(o => Priority(o.Attributes.Name ?? "")))
+        // Only original names determine trimming priority.
+        foreach (var (obj, name) in WithDisplayNames(objects.OrderBy(o => Priority(o.Name))))
         {
-            string name = obj.Attributes.Name ?? "Component";
-            try { components.Add(new Component(name,obj.Id,Solid(obj,factor,barn))); }
+            try { components.Add(new Component(name,obj.Id,Solid(obj,factor))); }
             catch (Exception ex) { throw new InvalidOperationException($"{name} ({obj.Id}): {ex.Message}",ex); }
         }
         components=SolidCleanup.Cut(components);
@@ -31,15 +41,37 @@ internal static class Parts
 
     }
 
-    private static int Priority(string name)
+    internal static IEnumerable<(SourcePart Source, string Name)> WithDisplayNames(IEnumerable<SourcePart> objects)
     {
-        var n = name.ToLowerInvariant();
+        var sources = objects.ToList();
+        var used = new HashSet<string>(sources.Select(o => o.Name?.Trim() ?? ""), StringComparer.OrdinalIgnoreCase);
+        var nextByLayer = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in sources)
+        {
+            if (!string.IsNullOrWhiteSpace(source.Name))
+            {
+                yield return (source, source.Name);
+                continue;
+            }
+
+            string prefix = string.IsNullOrWhiteSpace(source.LayerName) ? "Part" : source.LayerName.Trim();
+            int number = nextByLayer.GetValueOrDefault(prefix, 1);
+            string name;
+            do { name = $"{prefix} {number++:00}"; } while (!used.Add(name));
+            nextByLayer[prefix] = number;
+            yield return (source, name);
+        }
+    }
+
+    private static int Priority(string? name)
+    {
+        var n = name?.ToLowerInvariant() ?? "";
         if (n.Contains("ground floor") || n.Contains("upper floor")) return 0;
         if (n.Contains("wall")) return 1;
         return n.Contains("roof") || n.Contains("slab") || n.Contains("deck") ? 2 : 3;
     }
 
-    private static Brep Solid(RhinoObject obj, double factor, bool barn)
+    private static Brep Solid(SourcePart obj, double factor)
     {
         var b = obj.Geometry switch
         {
@@ -50,8 +82,8 @@ internal static class Parts
         };
         b.Transform(Transform.Scale(Point3d.Origin, factor));
         if (!b.IsSolid && obj.Geometry is Brep panel &&
-            obj.Attributes.Name is ("Simplified - west wall" or "Simplified - north wall") &&
-            (barn || obj.Document.Layers[obj.Attributes.LayerIndex].FullPath == "COMPARE - Simplified full size::Walls"))
+            obj.Name is ("Simplified - west wall" or "Simplified - north wall") &&
+            obj.RepairBarnPanel)
         {
             b = RecoverPanel(panel,factor);
         }

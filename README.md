@@ -1,10 +1,28 @@
-# ThreeDeePrint for Rhino 8
+# Go2Bed for Rhino and Grasshopper
+
+Turn separate architectural solids into flat-packed print kits. Preview each Prusa MK4S plate in Rhino, then export selected parts or complete plates.
 
 ## Run from Rider on macOS
 
 Open [ThreeDeePrint.sln](ThreeDeePrint.sln) in Rider. Quit any running Rhino 8 session after saving your work, then press **Play** with **Rhino 8 — Flat-pack preview** selected. Rider builds the plug-in, launches Rhino 8 with a build-folder copy of the barn, and starts **FlatPackPreview**. Select the components to print and press **Enter**. Inspect **3D Printer → Kit 01** and run **FlatPackExportSTL** when ready. Quit the test Rhino session before the next Play to load your latest build.
 
 ## Install a packaged build
+
+The [Go2Bed 1.0.0 Yak package](dist/go2bed-1.0.0-rh8_21-mac.yak) includes the Rhino commands and Grasshopper component for Rhino 8.21 or later on macOS. From this repository, install it locally and restart Rhino.
+
+```sh
+"/Applications/Rhino 8.app/Contents/Resources/bin/yak" install "$PWD/dist/go2bed-1.0.0-rh8_21-mac.yak"
+```
+
+To browse it in Rhino’s **PackageManager**, append the absolute path of this repository’s `dist` folder to the semicolon-separated **Rhino.Options.PackageManager.Sources** setting under Advanced preferences, then search for **Go2Bed**. The release is distributed locally. [McNeel’s package source guide](https://developer.rhino3d.com/guides/yak/package-sources/)
+
+### Grasshopper
+
+Place **Go2Bed → Print → Flat Pack** on the canvas. Connect referenced Rhino components or Grasshopper Breps, extrusions or closed meshes to **G**. The component collects geometry into one kit. Supply a single value for each setting. Scale defaults to 1:50, the build volume to 250 × 210 × 220 mm, and finger joints to off.
+
+The outputs give packed meshes, matching part names and bed outlines. Each tree branch represents one plate. Right-click the **Flat Pack component** and choose **Bake** to create the numbered kit under **3D Printer** with its assembly reference and plate metadata. Select the baked meshes and run **FlatPackExportSTL** or **FlatPackExportPrusa**. Ordinary Grasshopper recomputes only update the preview.
+
+### Rhino-only installer
 
 **Install on Mac** by double-clicking [ThreeDeePrint.macrhi](dist/ThreeDeePrint.macrhi), then quit and reopen Rhino. The installer contains the compiled C# plug-in and its geometry libraries. Use Rhino 8.21 or later. [McNeel’s Mac installer instructions](https://developer.rhino3d.com/guides/rhinocommon/plugin-installers-mac/)
 
@@ -14,6 +32,8 @@ Open [ThreeDeePrint.sln](ThreeDeePrint.sln) in Rider. Quit any running Rhino 8 s
 2. Set the scale denominator and build volume. To add alignment joints, enable **Add wall-to-slab fingers** and choose the **clearance per side** in millimetres. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints.
 3. Expand **3D Printer → Kit 01** in Layers. Each **Plate** layer contains its bed outline, label and numbered meshes at physical print size. The viewport zooms to the plates. Toggle the plate layers to inspect them individually. Turn on **Assembly reference**, select its objects and use Zoom Selected to see the numbered pieces in their assembled positions. The original building stays in the document.
 4. Save the Rhino document to keep the preview. Each new bake creates a separate numbered kit. Preview creates no STL files.
+
+Go2Bed keeps existing object names. For unnamed objects, it numbers parts by their Rhino layer, such as `Walls 01` and `Walls 02`. Geometry without a source layer gets names such as `Part 01`. The same name and piece ID appear on the baked plate and assembly meshes, in the Grasshopper names output, and in individual STL and PrusaSlicer exports.
 
 ### Alignment joints
 
@@ -34,6 +54,8 @@ Select the baked pieces and run **FlatPackExportPrusa**. **Project** writes one 
 [Example PrusaSlicer projects and printer files](Barn-plugin-preview/PrusaSlicer/)
 
 ## Source and build
+
+Run [packaging/build-mac.sh](packaging/build-mac.sh) to build both plug-ins and generate the Yak distribution under `dist`. The [Go2Bed icon](brand/go2bed-gable.png) shows a gable on a build plate. The [alternate icon](brand/go2bed-joint.png) shows two interlocking walls.
 
 Build [ThreeDeePrint.csproj](Plugin/ThreeDeePrint.csproj) using `dotnet build Plugin -c Release`. The build produces the managed RHP under `Plugin/bin/Release/net7.0` and the Mac installer under `dist`.
 
