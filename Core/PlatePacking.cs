@@ -1,7 +1,7 @@
 using Clipper2Lib;
 using Rhino.Geometry;
 
-namespace ThreeDeePrint;
+namespace Go2Bed;
 
 internal record Placement(Part Part, int Plate, Mesh Placed);
 

@@ -1,7 +1,7 @@
 using Rhino;
 using Rhino.Geometry;
 
-namespace ThreeDeePrint;
+namespace Go2Bed;
 
 // A row of short fingers indexes a panel into a horizontal plate. All dimensions
 // are physical millimetres. Both sides of a joint are committed together.

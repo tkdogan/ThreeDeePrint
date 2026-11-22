@@ -6,7 +6,8 @@
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="ThreeDeePrint" />
+    <EmbeddedResource Include="../Plugin/Profiles/MK4S.config" LogicalName="Go2Bed.MK4S.config" />
+    <InternalsVisibleTo Include="Go2Bed" />
     <InternalsVisibleTo Include="Go2Bed.Grasshopper" />
     <PackageReference Include="Clipper2" Version="2.0.0" />
     <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />

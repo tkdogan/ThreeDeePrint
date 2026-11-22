@@ -2,40 +2,54 @@
 
 Turn separate architectural solids into flat-packed print kits. Preview each Prusa MK4S plate in Rhino, then export selected parts or complete plates.
 
+## Rhino commands
+
+| Command | What it does | Availability |
+| --- | --- | --- |
+| `FlatPackPreview` | Scales and packs selected model components onto print beds, then bakes numbered plate meshes and an assembly reference into the Rhino document. The settings include scale, build volume, optional finger joints, and source colors. | All builds |
+| `FlatPackExportSTL` | Exports selected baked print meshes as one STL per piece (`Parts`) or one STL per plate (`GroupedPlates`), using the reviewed positions on the plate. | All builds |
+| `FlatPackExportPrusa` | Writes an editable PrusaSlicer 3MF project for each selected plate using the MK4S preset. `ProjectAndBGCode` also runs the installed PrusaSlicer to generate binary G-code. | All builds |
+| `FlatPackBarnPreview` | Opens the bundled barn sample and bakes its simplified exterior and interior components at 1:50 for the MK4S without selection or settings prompts. Each run creates a numbered kit. | Debug builds only |
+
 ## Run from Rider on macOS
 
-Open [ThreeDeePrint.sln](ThreeDeePrint.sln) in Rider. Quit any running Rhino 8 session after saving your work, then press **Play** with **Rhino 8 — Flat-pack preview** selected. Rider builds the plug-in, launches Rhino 8 with a build-folder copy of the barn, and starts **FlatPackPreview**. Select the components to print and press **Enter**. Inspect **3D Printer → Kit 01** and run **FlatPackExportSTL** when ready. Quit the test Rhino session before the next Play to load your latest build.
+Open [Go2Bed.sln](Go2Bed.sln) in Rider, choose **Debug** and the **Rhino 8 — Go2Bed** launch profile, then press **Play**. Rhino starts normally. If it shows the start window, open a blank model to get a command prompt. Restart the test Rhino session after rebuilding to load the latest plug-in.
 
 ## Install a packaged build
 
-The [Go2Bed 1.0.0 Yak package](dist/go2bed-1.0.0-rh8_21-mac.yak) includes the Rhino commands and Grasshopper component for Rhino 8.21 or later on macOS. From this repository, install it locally and restart Rhino.
+The [Go2Bed 1.1.0 Yak package](dist/go2bed-1.1.0-rh8_21-mac.yak) includes the Rhino commands and five Grasshopper components for Rhino 8.21 or later on macOS. From this repository, install it locally and restart Rhino.
 
 ```sh
-"/Applications/Rhino 8.app/Contents/Resources/bin/yak" install "$PWD/dist/go2bed-1.0.0-rh8_21-mac.yak"
+"/Applications/Rhino 8.app/Contents/Resources/bin/yak" install "$PWD/dist/go2bed-1.1.0-rh8_21-mac.yak"
 ```
 
 To browse it in Rhino’s **PackageManager**, append the absolute path of this repository’s `dist` folder to the semicolon-separated **Rhino.Options.PackageManager.Sources** setting under Advanced preferences, then search for **Go2Bed**. The release is distributed locally. [McNeel’s package source guide](https://developer.rhino3d.com/guides/yak/package-sources/)
 
 ### Grasshopper
 
-Place **Go2Bed → Print → Flat Pack** on the canvas. Connect referenced Rhino components or Grasshopper Breps, extrusions or closed meshes to **G**. The component collects geometry into one kit. Supply a single value for each setting. Scale defaults to 1:50, the build volume to 250 × 210 × 220 mm, and finger joints to off.
+Use the five components under **Go2Bed → Print**.
 
-The outputs give packed meshes, matching part names and bed outlines. Each tree branch represents one plate. Right-click the **Flat Pack component** and choose **Bake** to create the numbered kit under **3D Printer** with its assembly reference and plate metadata. Select the baked meshes and run **FlatPackExportSTL** or **FlatPackExportPrusa**. Ordinary Grasshopper recomputes only update the preview.
+1. **Prepare Parts** accepts model geometry and scale. It trims overlaps, applies optional finger joints, and outputs a prepared kit plus the solids for inspection.
+2. Connect **Prepared kit** to **Flat Pack**. Adjust the build volume here to orient, split and pack the pieces. The default bed is the Prusa MK4S.
+3. Connect **Packed kit** to **Preview**. Meshes, names and outlines are grouped by plate. Right-click Preview and choose **Bake** for a numbered Rhino kit with editable plate layers.
+4. Connect **Reviewed kit** to **Export STL**, **Export Prusa**, or both. Set an existing destination folder and connect a Grasshopper **Button** to each **Write** input. STL supports individual pieces or grouped plates. Prusa writes one 3MF project per plate, with optional BGCode slicing. Each exporter returns its last output folder.
+
+Grasshopper exports use the wired layout directly. To export manual edits to baked Rhino meshes, use the Rhino selection-based export commands. Existing definitions with the original all-in-one Flat Pack component continue to use their saved wiring.
 
 ### Rhino-only installer
 
-**Install on Mac** by double-clicking [ThreeDeePrint.macrhi](dist/ThreeDeePrint.macrhi), then quit and reopen Rhino. The installer contains the compiled C# plug-in and its geometry libraries. Use Rhino 8.21 or later. [McNeel’s Mac installer instructions](https://developer.rhino3d.com/guides/rhinocommon/plugin-installers-mac/)
+**Install on Mac** by double-clicking [Go2Bed.macrhi](dist/Go2Bed.macrhi), then quit and reopen Rhino. The installer contains the compiled C# plug-in and its geometry libraries. Use Rhino 8.21 or later. [McNeel’s Mac installer instructions](https://developer.rhino3d.com/guides/rhinocommon/plugin-installers-mac/)
 
 ## Bake and review
 
-1. Run **FlatPackPreview** in Rhino. Select the wall, slab, or other component objects to print and press **Enter** to open the settings dialog. Only the selected components go into this kit.
+1. Select the wall, slab, or other component objects and run **FlatPackPreview** to open the settings dialog. If you start the command without a component selection, select the objects at the prompt and press **Enter**.
 2. Set the scale denominator and build volume. To add alignment joints, enable **Add wall-to-slab fingers** and choose the **clearance per side** in millimetres. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints.
 3. Expand **3D Printer → Kit 01** in Layers. Each **Plate** layer contains its bed outline, label and numbered meshes at physical print size. The viewport zooms to the plates. Toggle the plate layers to inspect them individually. Turn on **Assembly reference**, select its objects and use Zoom Selected to see the numbered pieces in their assembled positions. The original building stays in the document.
 4. Save the Rhino document to keep the preview. Each new bake creates a separate numbered kit. Preview creates no STL files.
 
 Go2Bed keeps existing object names. For unnamed objects, it numbers parts by their Rhino layer, such as `Walls 01` and `Walls 02`. Geometry without a source layer gets names such as `Part 01`. The same name and piece ID appear on the baked plate and assembly meshes, in the Grasshopper names output, and in individual STL and PrusaSlicer exports.
 
-**Use source colors** is on by default in the Rhino preview dialog and the Grasshopper component. When you bake, the plate and assembly meshes copy their source object's Rhino display color, including color inherited from its layer. Turn the setting off to use the kit's layer colors. Grasshopper geometry without a Rhino source uses the kit's layer colors.
+**Use source colors** is on by default in the Rhino preview dialog and the Grasshopper Preview component. When you bake, the plate and assembly meshes copy their source object's Rhino display color, including color inherited from its layer. Turn the setting off to use the kit's layer colors. Grasshopper geometry without a Rhino source uses the kit's layer colors.
 
 ### Alignment joints
 
@@ -57,9 +71,9 @@ Select the baked pieces and run **FlatPackExportPrusa**. **Project** writes one 
 
 ## Source and build
 
-Run [packaging/build-mac.sh](packaging/build-mac.sh) to build both plug-ins and generate the Yak distribution under `dist`. The [Go2Bed icon set](brand/go2bed-icon-set.png) uses interlocking walls for the package and Grasshopper category, and separated panels for the Flat Pack component. In Rhino, open the **Go2Bed** toolbar for Preview, Export STL and Export for Prusa. The package includes the [Rhino toolbar file](Plugin/ThreeDeePrint.rui).
+Run [packaging/build-mac.sh](packaging/build-mac.sh) to build both plug-ins and generate the Yak distribution under `dist`. The [Go2Bed icon set](brand/go2bed-icon-set.png) uses interlocking walls for the package and Grasshopper category, and separated panels for the Flat Pack component. In Rhino, open the **Go2Bed** toolbar for Preview, Export STL and Export for Prusa. The package includes the [Rhino toolbar file](Plugin/Go2Bed.rui).
 
-Build [ThreeDeePrint.csproj](Plugin/ThreeDeePrint.csproj) using `dotnet build Plugin -c Release`. The build produces the managed RHP under `Plugin/bin/Release/net7.0` and the Mac installer under `dist`.
+Run `dotnet build Go2Bed.sln -c Release` to build the solution. The Rhino plug-in is written to `Plugin/bin/Release/net7.0/Go2Bed.rhp` and the Mac installer to `dist/Go2Bed.macrhi`.
 
 The plug-in uses Manifold to subtract previously allocated material with 0.05 mm clearance on each axis. Floors take precedence at intersections, followed by walls, roofs and decks, then details. RhinoCommon prepares components, scores planar orientations for bed contact and overhang, splits oversized panels with straight glue seams and packs the part silhouettes onto plates. For the barn example, select components from the simplified exterior and interior layers. The two open exterior panels are recovered from their projected render geometry. For other BIM models, select separate solid components with a supporting planar face. Explode blocks first.
 
@@ -68,7 +82,7 @@ The project includes a universal macOS geometry library for Apple silicon and In
 
 ---
 
-# Earlier Python prototype
+# Go2Bed Python prototype
 
 Open [the barn kit](Barn-kit/Flatpack.3dm) in Rhino 8 and run Zoom Extents. The six visible layers are print layouts in millimetres. The hidden Assembly reference layer contains the matching parts in their assembled positions. For printing, open the numbered 3MF plates directly in your slicer. Each object has the same ID in Rhino, the 3MF, the individual STL filename and the [assembly guide](Barn-kit/Assembly.md).
 

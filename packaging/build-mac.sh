@@ -2,12 +2,12 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 yak="/Applications/Rhino 8.app/Contents/Resources/bin/yak"
-dotnet build "$root/Plugin/ThreeDeePrint.csproj" --configuration Release "$@"
+dotnet build "$root/Plugin/Go2Bed.csproj" --configuration Release "$@"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 build="$root/Plugin/bin/Release/net7.0"
-cp "$build"/{ThreeDeePrint.rhp,ThreeDeePrint.rui,Go2Bed.Grasshopper.gha,Go2Bed.Core.dll,Clipper2Lib.dll,libThreeDeeSolid.dylib,Manifold-LICENSE.txt,Manifold-AUTHORS.txt} "$stage/"
-cp "$root/Plugin/obj/Release/net7.0/mac-package/ThreeDeePrint.rhp/License.txt" "$stage/Clipper2-LICENSE.txt"
+cp "$build"/{Go2Bed.rhp,Go2Bed.rui,Go2Bed.Grasshopper.gha,Go2Bed.Core.dll,Clipper2Lib.dll,libGo2BedSolid.dylib,Manifold-LICENSE.txt,Manifold-AUTHORS.txt} "$stage/"
+cp "$root/Plugin/obj/Release/net7.0/go2bed-mac-package/Go2Bed.rhp/License.txt" "$stage/Clipper2-LICENSE.txt"
 cp "$root/packaging/manifest.yml" "$stage/"
 cp "$root/brand/go2bed.png" "$stage/icon.png"
 cd "$stage"

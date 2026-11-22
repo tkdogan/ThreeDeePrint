@@ -1,10 +1,9 @@
 {
   "profiles": {
-    "Rhino 8 — Flat-pack preview": {
+    "Rhino 8 — Go2Bed": {
       "commandName": "Executable",
       "executablePath": "/Applications/Rhino 8.app/Contents/MacOS/Rhinoceros",
       "workingDirectory": "$(TargetDir)",
-      "commandLineArgs": "\"$(TargetDir)Barn_original_with_simplified_interior.3dm\" -runscript \"_-RunPythonScript \\\"$(TargetDir)RiderPreview.py\\\"\"",
       "environmentVariables": {
         "RHINO_PACKAGE_DIRS": "$(TargetDir)"
       }

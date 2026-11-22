@@ -1,11 +1,11 @@
 using System.Runtime.InteropServices;
 using Rhino.Geometry;
 
-namespace ThreeDeePrint;
+namespace Go2Bed;
 
 internal static class SolidCleanup
 {
-    private const string Library = "ThreeDeeSolid";
+    private const string Library = "Go2BedSolid";
     [DllImport(Library)] private static extern IntPtr td_clean(int count,int[] nv,int[] nf,double[] points,int[] triangles,out int failed);
     [DllImport(Library)] private static extern int td_count(IntPtr result,int component);
     [DllImport(Library)] private static extern void td_mesh(IntPtr result,int component,int piece,out int nv,out int nf,out IntPtr points,out IntPtr triangles);

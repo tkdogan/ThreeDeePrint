@@ -1,7 +1,7 @@
 using Eto.Drawing;
 using Eto.Forms;
 
-namespace ThreeDeePrint;
+namespace Go2Bed;
 
 internal record PreviewSettings(double Scale, double Width, double Depth, double Height,
     bool Fingers, double Clearance, bool UseSourceColors = true)

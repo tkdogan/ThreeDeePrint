@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <Title>Go2Bed</Title>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <AssemblyTitle>Go2Bed</AssemblyTitle>
     <Product>Go2Bed</Product>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -17,11 +17,12 @@
     <ProjectReference Include="../Core/Go2Bed.Core.csproj" />
     <PackageReference Include="Clipper2" Version="2.0.0" GeneratePathProperty="true" />
     <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
-    <None Update="ThreeDeePrint.rui" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Go2Bed.rui" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="../brand/icons/go2bed.ico" LogicalName="Go2Bed.Icon.ico" />
-    <EmbeddedResource Include="Profiles/MK4S.config" LogicalName="ThreeDeePrint.MK4S.config" />
-    <None Update="Native/libThreeDeeSolid.dylib;Native/Manifold-LICENSE.txt;Native/Manifold-AUTHORS.txt" TargetPath="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="Properties/RiderPreview.py" TargetPath="RiderPreview.py" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Native/libGo2BedSolid.dylib;Native/Manifold-LICENSE.txt;Native/Manifold-AUTHORS.txt" TargetPath="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Remove="FlatPackBarnPreview.cs" Condition="'$(Configuration)' != 'Debug'" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
     <None Include="../Barn_original_with_simplified_interior.3dm" Link="Barn_original_with_simplified_interior.3dm" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CopyGrasshopperForRider" AfterTargets="Build">
@@ -29,11 +30,11 @@
   </Target>
   <Target Name="PackageMac" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
     <PropertyGroup>
-      <PackageRoot>$(IntermediateOutputPath)mac-package</PackageRoot>
-      <Bundle>$(PackageRoot)/ThreeDeePrint.rhp</Bundle>
+      <PackageRoot>$(IntermediateOutputPath)go2bed-mac-package</PackageRoot>
+      <Bundle>$(PackageRoot)/Go2Bed.rhp</Bundle>
     </PropertyGroup>
     <MakeDir Directories="$(Bundle);$(MSBuildProjectDirectory)/../dist"/>
-    <Copy SourceFiles="$(TargetPath);$(TargetDir)ThreeDeePrint.rui;$(TargetDir)Go2Bed.Core.dll;$(TargetDir)Clipper2Lib.dll;$(TargetDir)libThreeDeeSolid.dylib;$(TargetDir)Manifold-LICENSE.txt;$(TargetDir)Manifold-AUTHORS.txt;$(PkgClipper2)/License.txt" DestinationFolder="$(Bundle)"/>
-    <ZipDirectory SourceDirectory="$(PackageRoot)" DestinationFile="$(MSBuildProjectDirectory)/../dist/ThreeDeePrint.macrhi" Overwrite="true"/>
+    <Copy SourceFiles="$(TargetPath);$(TargetDir)Go2Bed.rui;$(TargetDir)Go2Bed.Core.dll;$(TargetDir)Clipper2Lib.dll;$(TargetDir)libGo2BedSolid.dylib;$(TargetDir)Manifold-LICENSE.txt;$(TargetDir)Manifold-AUTHORS.txt;$(PkgClipper2)/License.txt" DestinationFolder="$(Bundle)"/>
+    <ZipDirectory SourceDirectory="$(PackageRoot)" DestinationFile="$(MSBuildProjectDirectory)/../dist/Go2Bed.macrhi" Overwrite="true"/>
   </Target>
 </Project>

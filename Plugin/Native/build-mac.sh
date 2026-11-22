@@ -11,5 +11,5 @@ tar -xzf "$work/src.tar.gz" -C "$work"
 src="$work/manifold3d-3.5.5"
 cmake -S "$src" -B "$work/build" -DMANIFOLD_CROSS_SECTION=OFF -DMANIFOLD_TEST=OFF -DMANIFOLD_PYBIND=OFF -DMANIFOLD_CBIND=OFF -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 cmake --build "$work/build" --parallel
-clang++ -std=c++17 -O2 -arch arm64 -arch x86_64 -mmacosx-version-min=12.0 -dynamiclib -I"$src/include" -I"$work/build/include" "$here/solid.cpp" "$work/build/src/libmanifold.a" -Wl,-install_name,@rpath/libThreeDeeSolid.dylib -o "$here/libThreeDeeSolid.dylib"
-codesign -s - -f "$here/libThreeDeeSolid.dylib"
+clang++ -std=c++17 -O2 -arch arm64 -arch x86_64 -mmacosx-version-min=12.0 -dynamiclib -I"$src/include" -I"$work/build/include" "$here/solid.cpp" "$work/build/src/libmanifold.a" -Wl,-install_name,@rpath/libGo2BedSolid.dylib -o "$here/libGo2BedSolid.dylib"
+codesign -s - -f "$here/libGo2BedSolid.dylib"

@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Xml.Linq;
 using Rhino.Geometry;
 
-namespace ThreeDeePrint;
+namespace Go2Bed;
 
 internal sealed class PrusaProject
 {
@@ -77,7 +77,7 @@ internal sealed class PrusaProject
             new XAttribute(XNamespace.Xmlns+"slic3rpe",Prusa.NamespaceName),
             new XElement(Core+"metadata",new XAttribute("name","slic3rpe:Version3mf"),"1"),resources,build));
         Xml("Metadata/Slic3r_PE_model.config",config);
-        using var profile = typeof(PrusaProject).Assembly.GetManifestResourceStream("ThreeDeePrint.MK4S.config")
+        using var profile = typeof(PrusaProject).Assembly.GetManifestResourceStream("Go2Bed.MK4S.config")
             ?? throw new InvalidOperationException("Missing embedded MK4S profile.");
         using var output = zip.CreateEntry("Metadata/Slic3r_PE.config").Open();
         profile.CopyTo(output);

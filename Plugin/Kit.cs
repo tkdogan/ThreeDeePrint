@@ -4,7 +4,7 @@ using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 
-namespace ThreeDeePrint;
+namespace Go2Bed;
 
 public static class Kit
 {
@@ -53,11 +53,8 @@ public static class Kit
         if (parts.Length == 0) throw new ArgumentException("No baked print meshes selected.");
         bool multipleKits = parts.Select(o => o.Attributes.GetUserString("FlatPack.Kit")).Distinct().Count() > 1;
         double mm = RhinoMath.UnitScale(doc.ModelUnitSystem, UnitSystem.Millimeters);
-        string staging = Path.Combine(parent, ".flatpack-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staging);
-        try
+        IEnumerable<ExportPlate> Plates()
         {
-            int count = 0;
             foreach (var group in parts.GroupBy(o => o.Attributes.LayerIndex).OrderBy(g => g.Key))
             {
                 var plate = doc.Layers[group.Key];
@@ -69,63 +66,15 @@ public static class Kit
                     o.Attributes.GetUserString("FlatPack.Kind") == "Bed" && o.Attributes.GetUserString("FlatPack.Kit") == kit)
                     ?? throw new ArgumentException("Missing bed outline on " + plate.FullPath);
                 var box = bed.Geometry.GetBoundingBox(true);
-                string directory = multipleKits ? Path.Combine(staging, $"Kit-{doc.Layers.FindId(plate.ParentLayerId).Index}") : staging;
-                Directory.CreateDirectory(directory);
+                string directory = multipleKits ? $"Kit-{doc.Layers.FindId(plate.ParentLayerId).Index}" : "";
                 // Keep the baked plate number even when earlier plates are unselected.
                 string plateName = plate.Name.StartsWith("Plate ", StringComparison.Ordinal) &&
                     int.TryParse(plate.Name.Substring(6), out int number) && number > 0
                     ? $"Plate-{number:00}" : $"Layer-{plate.Index}";
-                string folder = Path.Combine(directory, plateName);
-                using var grouped = groupByPlate ? new Mesh() : null;
-                var project = prusa ? new PrusaProject() : null;
-                if (!groupByPlate && !prusa) Directory.CreateDirectory(folder);
-                foreach (var obj in pieces)
-                {
-                    var mesh = (obj.Geometry as Mesh)?.DuplicateMesh() ?? throw new ArgumentException("Expected a baked mesh.");
-                    mesh.Translate(Point3d.Origin-box.Min);
-                    mesh.Scale(mm);
-                    mesh.Faces.ConvertQuadsToTriangles();
-                    if (!mesh.IsValid || !mesh.IsClosed || mesh.SolidOrientation()==0) throw new ArgumentException(obj.Name+" must be a closed oriented solid.");
-                    if (mesh.SolidOrientation()<0) mesh.Flip(true,true,true);
-                    var bounds = mesh.GetBoundingBox(true);
-                    if (Math.Abs(bounds.Min.Z)>.02 || bounds.Min.X<-.02 || bounds.Min.Y<-.02 ||
-                        bounds.Max.X>box.Diagonal.X*mm+.02 || bounds.Max.Y>box.Diagonal.Y*mm+.02)
-                        throw new ArgumentException(obj.Name+" is off the bed on "+plate.FullPath);
-                    var label = new string((obj.Name ?? "Part").Select(c=>char.IsLetterOrDigit(c)||c=='-'?c:'_').ToArray());
-                    count++;
-                    if (project != null) project.Add(obj.Name ?? "Part",mesh);
-                    else if (grouped != null) grouped.Append(mesh);
-                    else WriteStl(Path.Combine(folder,$"{count:00}-{label}.stl"),mesh);
-                }
-                if (project != null)
-                {
-                    string projectPath = folder+".3mf";
-                    project.Write(projectPath);
-                    if (slice) PrusaProject.Slice(projectPath);
-                }
-                if (grouped != null) WriteStl(folder+".stl",grouped);
+                yield return new ExportPlate(Path.Combine(directory,plateName), box.Diagonal.X*mm, box.Diagonal.Y*mm,
+                    pieces.Select(obj => new ExportPiece(obj.Name ?? "Part",(Mesh)obj.Geometry)), box.Min, mm);
             }
-            string baseName = prusa ? "FlatPack-Prusa" : "FlatPack-STL";
-            string dest = Path.Combine(parent,baseName);
-            for (int i=2;Directory.Exists(dest)||File.Exists(dest);i++) dest=Path.Combine(parent,$"{baseName}-{i}");
-            Directory.Move(staging,dest);
-            return dest;
         }
-        finally { if (Directory.Exists(staging)) Directory.Delete(staging,true); }
-    }
-
-    private static void WriteStl(string path,Mesh mesh)
-    {
-        using var writer = new BinaryWriter(File.Open(path,FileMode.CreateNew),Encoding.ASCII);
-        writer.Write(new byte[80]); writer.Write((uint)mesh.Faces.Count);
-        foreach (var f in mesh.Faces)
-        {
-            var a = mesh.Vertices[f.A]; var b = mesh.Vertices[f.B]; var c = mesh.Vertices[f.C];
-            var n = Vector3d.CrossProduct((Vector3d)(b-a),(Vector3d)(c-a));
-            if (!n.Unitize()) throw new ArgumentException("Degenerate STL triangle in "+Path.GetFileName(path));
-            writer.Write((float)n.X); writer.Write((float)n.Y); writer.Write((float)n.Z);
-            foreach (var p in new[]{a,b,c}) { writer.Write(p.X); writer.Write(p.Y); writer.Write(p.Z); }
-            writer.Write((ushort)0);
-        }
+        return PrintFiles.Write(Plates(),parent,groupByPlate,prusa,slice);
     }
 }

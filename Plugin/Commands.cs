@@ -8,9 +8,9 @@ using Rhino.PlugIns;
 
 [assembly: PlugInDescription(DescriptionType.Icon, "Go2Bed.Icon.ico")]
 [assembly: Guid("09D603C7-8651-4969-B62B-C8EA8CCDBE54")]
-namespace ThreeDeePrint;
+namespace Go2Bed;
 
-public sealed class ThreeDeePrintPlugin : PlugIn { }
+public sealed class Go2BedPlugin : PlugIn { }
 
 internal static class PreviewDefaults
 {
@@ -30,7 +30,7 @@ public sealed class FlatPackPreview : Command
             picker.SetCommandPrompt("Select components to print, then press Enter");
             picker.GeometryFilter = ObjectType.Brep | ObjectType.Extrusion | ObjectType.Mesh;
             picker.SubObjectSelect = false;
-            picker.EnablePreSelect(false, true);
+            picker.EnablePreSelect(true, true);
             picker.GetMultiple(1, 0);
             if (picker.CommandResult() != Result.Success) return picker.CommandResult();
             var inputs = picker.Objects().Select(r => r.Object()).ToArray();
@@ -101,19 +101,15 @@ internal static class ExportCommand
     {
         try
         {
-            var selection = doc.Objects.GetSelectedObjects(false, false).ToArray();
-            if (selection.Length == 0)
-            {
-                using var picker = new GetObject();
-                picker.SetCommandPrompt("Select baked parts to print, then press Enter");
-                picker.GeometryFilter = ObjectType.Mesh;
-                picker.SubObjectSelect = false;
-                picker.SetCustomGeometryFilter((obj, _, _) => Kit.IsPrintPart(obj));
-                picker.GetMultiple(1, 0);
-                if (picker.CommandResult() != Result.Success) return picker.CommandResult();
-                selection = picker.Objects().Select(r => r.Object()).ToArray();
-            }
-            var parts = selection.Where(Kit.IsPrintPart).ToArray();
+            using var picker = new GetObject();
+            picker.SetCommandPrompt("Select baked parts to print, then press Enter");
+            picker.GeometryFilter = ObjectType.Mesh;
+            picker.SubObjectSelect = false;
+            picker.SetCustomGeometryFilter((obj, _, _) => Kit.IsPrintPart(obj));
+            picker.EnablePreSelect(true, true);
+            picker.GetMultiple(1, 0);
+            if (picker.CommandResult() != Result.Success) return picker.CommandResult();
+            var parts = picker.Objects().Select(r => r.Object()).Where(Kit.IsPrintPart).ToArray();
             if (parts.Length == 0) throw new ArgumentException("Select printable meshes on the baked Plate layers.");
             int plateCount = parts.Select(o => o.Attributes.LayerIndex).Distinct().Count();
             RhinoApp.WriteLine($"Selected {parts.Length} printable pieces on {plateCount} plates.");

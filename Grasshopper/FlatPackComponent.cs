@@ -5,7 +5,7 @@ using Grasshopper.Kernel.Types;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
-using ThreeDeePrint;
+using Go2Bed;
 
 namespace Go2Bed.Grasshopper;
 
@@ -41,7 +41,8 @@ public sealed class FlatPackComponent : GH_Component
     private bool useSourceColors;
     private uint documentId;
     private UnitSystem units;
-    public FlatPackComponent() : base("Flat Pack","FlatPack",
+    public override GH_Exposure Exposure => GH_Exposure.hidden;
+    public FlatPackComponent() : base("Flat Pack (Legacy)","FlatPack",
         "Trim and orient components, then pack them onto build plates. Bake this component to create an exportable Rhino kit.",
         "Go2Bed","Print") { }
     public override Guid ComponentGuid => new("CE19F9B4-B880-4903-ADF8-F47892485583");
@@ -101,24 +102,7 @@ public sealed class FlatPackComponent : GH_Component
                 sourceBounds.Union(g.GetBoundingBox(true));
             }
             var layout = PrintLayout.Solve(sources,units,scale,width,depth,height,fingers,clearance);
-            var meshes = new GH_Structure<GH_Mesh>();
-            var names = new GH_Structure<GH_String>();
-            var beds = new GH_Structure<GH_Curve>();
-            double u = RhinoMath.UnitScale(UnitSystem.Millimeters,units);
-            for (int i=0;i<layout.Count;i++)
-            {
-                var entry=layout[i];
-                var path=new GH_Path(entry.Plate-1);
-                var origin=new Point3d((entry.Plate-1)*(width+15)*u,0,0);
-                if (!beds.PathExists(path))
-                    beds.Append(new GH_Curve(new Rectangle3d(new Plane(origin,Vector3d.ZAxis),width*u,depth*u).ToNurbsCurve()),path);
-                var mesh=entry.Placed.DuplicateMesh();
-                mesh.Scale(u);
-                mesh.Translate(origin-Point3d.Origin);
-                meshes.Append(new GH_Mesh(mesh),path);
-                names.Append(new GH_String($"P{i+1:00} {entry.Part.Name}"),path);
-            }
-            da.SetDataTree(0,meshes); da.SetDataTree(1,names); da.SetDataTree(2,beds);
+            PackedKit.SetPreview(da,layout,width,depth,units);
             solved = layout;
         }
         catch (Exception e) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,e.Message); }

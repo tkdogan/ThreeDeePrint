@@ -3,7 +3,7 @@ using Clipper2Lib;
 using Rhino.DocObjects;
 using Rhino.Geometry;
 
-namespace ThreeDeePrint;
+namespace Go2Bed;
 
 internal record SourcePart(GeometryBase Geometry, string? Name, Guid Id, bool RepairBarnPanel = false, string? LayerName = null)
 {
@@ -20,7 +20,7 @@ internal record Component(string Name, Guid Source, Brep Solid);
 internal static class Parts
 {
     private const double Tol = .001; // All geometry here is at print scale, in millimetres.
-    public static IEnumerable<Part> Prepare(IEnumerable<SourcePart> objects, double factor, double width, double depth, bool fingers, double clearance)
+    internal static List<Component> Clean(IEnumerable<SourcePart> objects, double factor, bool fingers, double clearance)
     {
         var components = new List<Component>();
         // Only original names determine trimming priority.
@@ -31,6 +31,11 @@ internal static class Parts
         }
         components=SolidCleanup.Cut(components);
         if (fingers) FingerJoints.Apply(components,clearance);
+        return components;
+    }
+
+    internal static List<Part> Orient(IEnumerable<Component> components, double width, double depth)
+    {
         var prepared = new List<Part>();
         foreach (var component in components)
         {
