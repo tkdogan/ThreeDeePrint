@@ -6,7 +6,8 @@ Turn separate architectural solids into flat-packed print kits. Preview each Pru
 
 | Command | What it does | Availability |
 | --- | --- | --- |
-| `FlatPackPreview` | Scales and packs selected model components onto print beds, then bakes numbered plate meshes and an assembly reference into the Rhino document. The settings include scale, build volume, optional finger joints, and source colors. | All builds |
+| `FlatPackPreview` | Heals Brep copies, then scales and packs the selected components onto print beds. Bakes numbered plate meshes and an assembly reference into the Rhino document. Settings include scale, build volume, optional finger joints, and source colors. | All builds |
+| `FlatPackHealBreps` | Repairs selected Breps, joins matching naked edges, caps planar openings, and merges coplanar faces. Replaces document geometry when the result is a valid solid. | All builds |
 | `FlatPackExportSTL` | Exports selected baked print meshes as one STL per piece (`Parts`) or one STL per plate (`GroupedPlates`), using the reviewed positions on the plate. | All builds |
 | `FlatPackExportPrusa` | Writes an editable PrusaSlicer 3MF project for each selected plate using the MK4S preset. `ProjectAndBGCode` also runs the installed PrusaSlicer to generate binary G-code. | All builds |
 | `FlatPackBarnPreview` | Opens the bundled barn sample and bakes its simplified exterior and interior components at 1:50 for the MK4S without selection or settings prompts. Each run creates a numbered kit. | Debug builds only |

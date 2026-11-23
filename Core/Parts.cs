@@ -5,13 +5,15 @@ using Rhino.Geometry;
 
 namespace Go2Bed;
 
-internal record SourcePart(GeometryBase Geometry, string? Name, Guid Id, bool RepairBarnPanel = false, string? LayerName = null)
+internal record SourcePart(GeometryBase Geometry, string? Name, Guid Id, bool RepairBarnPanel = false,
+    string? LayerName = null, double? ModelTolerance = null, double? AngleTolerance = null)
 {
     internal static SourcePart FromObject(RhinoObject obj, bool barn = false)
     {
         var layer = obj.Document.Layers[obj.Attributes.LayerIndex];
         return new SourcePart(obj.Geometry, obj.Attributes.Name, obj.Id,
-            barn || layer.FullPath == "COMPARE - Simplified full size::Walls", layer.Name);
+            barn || layer.FullPath == "COMPARE - Simplified full size::Walls", layer.Name,
+            obj.Document.ModelAbsoluteTolerance, obj.Document.ModelAngleToleranceRadians);
     }
 }
 
@@ -81,19 +83,23 @@ internal static class Parts
     {
         var b = obj.Geometry switch
         {
-            Brep brep => brep.DuplicateBrep(),
+            Brep brep => BrepHealing.Heal(brep, obj.ModelTolerance ?? Tol / factor,
+                obj.AngleTolerance ?? RhinoMath.DefaultAngleTolerance, out _),
             Extrusion e => e.ToBrep(true),
             Mesh m when m.IsClosed => Brep.CreateFromMesh(m, true),
             _ => throw new ArgumentException("Select a solid Brep, extrusion or closed mesh.")
         };
-        b.Transform(Transform.Scale(Point3d.Origin, factor));
-        if (!b.IsSolid && obj.Geometry is Brep panel &&
+        if (b == null && obj.Geometry is Brep panel &&
             obj.Name is ("Simplified - west wall" or "Simplified - north wall") &&
             obj.RepairBarnPanel)
         {
             b = RecoverPanel(panel,factor);
         }
-        if (b == null || !b.IsValid || !b.IsSolid) throw new ArgumentException("Component must enclose a valid solid.");
+        else if (b != null && !b.Transform(Transform.Scale(Point3d.Origin, factor)))
+        {
+            throw new ArgumentException("Component could not be scaled.");
+        }
+        if (b == null || !b.IsValid || !b.IsSolid) throw new ArgumentException("Component must enclose a valid solid after repair.");
         if (b.SolidOrientation == BrepSolidOrientation.Inward) b.Flip();
         return b;
     }
@@ -158,6 +164,8 @@ internal static class Parts
     private static IEnumerable<Part> Flatten(Brep body, string name, Guid source, double width, double depth)
     {
         if (body.GetVolume() < .001) yield break;
+        const double contactBand = .05; // Millimetres above the lowest point at print scale.
+        double contactNormal = Math.Cos(2 * Math.PI / 180);
         var mesh = ToMesh(body);
         var candidates = new List<(Transform Frame,double Contact,double Overhang,double Footprint)>();
         foreach (var face in body.Faces)
@@ -178,15 +186,16 @@ internal static class Parts
                 var b = transform * mesh.Vertices.Point3dAt(tri.B);
                 var c = transform * mesh.Vertices.Point3dAt(tri.C);
                 var cross = Vector3d.CrossProduct(b-a,c-a);
-                if (Math.Max(a.Z,Math.Max(b.Z,c.Z)) < bounds.Min.Z+.01) contact += Math.Abs(cross.Z)/2;
+                // Sum the projected area of all near-horizontal underside triangles in the bed band.
+                if (Math.Max(a.Z,Math.Max(b.Z,c.Z)) <= bounds.Min.Z + contactBand &&
+                    cross.Z < -contactNormal * cross.Length) contact -= cross.Z/2;
                 else if (cross.Z < -.7071*cross.Length) overhang -= cross.Z/2;
             }
             if (contact>0) candidates.Add((transform, contact, overhang, bounds.Diagonal.X*bounds.Diagonal.Y));
         }
         if (candidates.Count == 0) throw new InvalidOperationException("No supporting planar face.");
-        double minContact = .65*candidates.Max(c => c.Contact);
-        var xform = candidates.Where(c => c.Contact >= minContact).OrderBy(c => Math.Round(c.Overhang,1))
-            .ThenByDescending(c => Math.Round(c.Contact,1)).ThenBy(c => c.Footprint).First().Frame;
+        var xform = candidates.OrderByDescending(c => Math.Round(c.Contact,1))
+            .ThenBy(c => Math.Round(c.Overhang,1)).ThenBy(c => c.Footprint).First().Frame;
         var flat = body.DuplicateBrep();
         flat.Transform(xform);
         var box = flat.GetBoundingBox(true);
