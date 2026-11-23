@@ -69,12 +69,12 @@ public sealed class FlatPackPreview : Command
         joints.AddOption("Plain"); joints.AddOption("FingerJoints");
         var sourceColors = new OptionToggle(defaults.UseSourceColors,"Off","On");
         int colorOption = joints.AddOptionToggle("SourceColors",ref sourceColors);
-        joints.SetDefaultString("Plain"); joints.AcceptNothing(true);
+        joints.SetDefaultString("FingerJoints"); joints.AcceptNothing(true);
         GetResult jointChoice;
         do { jointChoice = joints.Get(); }
         while (jointChoice == GetResult.Option && joints.OptionIndex() == colorOption);
         if (jointChoice!=GetResult.Option && jointChoice!=GetResult.Nothing) return null;
-        bool fingers=jointChoice==GetResult.Option && joints.Option().EnglishName=="FingerJoints";
+        bool fingers=jointChoice==GetResult.Nothing || joints.Option().EnglishName=="FingerJoints";
         double clearance=defaults.Clearance;
         if (fingers && RhinoGet.GetNumber("Finger clearance per side in mm",true,ref clearance,.05,.60)
             is not (Result.Success or Result.Nothing)) return null;
@@ -111,8 +111,7 @@ internal static class ExportCommand
             if (picker.CommandResult() != Result.Success) return picker.CommandResult();
             var parts = picker.Objects().Select(r => r.Object()).Where(Kit.IsPrintPart).ToArray();
             if (parts.Length == 0) throw new ArgumentException("Select printable meshes on the baked Plate layers.");
-            int plateCount = parts.Select(o => o.Attributes.LayerIndex).Distinct().Count();
-            RhinoApp.WriteLine($"Selected {parts.Length} printable pieces on {plateCount} plates.");
+            RhinoApp.WriteLine($"Selected {parts.Length} printable pieces.");
             bool grouped = false, slice = false;
             if (!prusa)
             {

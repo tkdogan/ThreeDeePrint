@@ -43,7 +43,7 @@ Grasshopper exports use the wired layout directly. To export manual edits to bak
 ## Bake and review
 
 1. Select the wall, slab, or other component objects and run **FlatPackPreview** to open the settings dialog. If you start the command without a component selection, select the objects at the prompt and press **Enter**.
-2. Set the scale denominator and build volume. To add alignment joints, enable **Add wall-to-slab fingers** and choose the **clearance per side** in millimetres. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints.
+2. Set the scale denominator and build volume. **Add wall-to-slab fingers** is enabled by default. Adjust the **clearance per side** in millimetres or uncheck the box for glue joints. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints.
 3. Expand **3D Printer → Kit 01** in Layers. Each **Plate** layer contains its bed outline, label and numbered meshes at physical print size. The viewport zooms to the plates. Toggle the plate layers to inspect them individually. Turn on **Assembly reference**, select its objects and use Zoom Selected to see the numbered pieces in their assembled positions. The original building stays in the document.
 4. Save the Rhino document to keep the preview. Each new bake creates a separate numbered kit. Preview creates no STL files.
 
@@ -53,11 +53,13 @@ Go2Bed keeps existing object names. For unnamed objects, it numbers parts by the
 
 ### Alignment joints
 
-Plain glue joints are the default. Finger mode adds rows of 5 mm wide tabs to eligible lower panel edges and cuts matching blind sockets in the horizontal slab underneath. The tabs enter vertically during assembly. The default 0.20 mm clearance on each side makes a 5.40 mm socket for a 5 mm finger. The same allowance applies at the tip. Short edges, thin slabs, openings and contacts blocked by another part can limit where joints are placed. Rhino reports the number of completed pairs. Roof seams and wall-to-wall corners retain their trimmed glue faces.
+Finger joints are the default. Eligible lower panel edges get rows of 5 mm wide tabs and matching blind sockets in the horizontal slab underneath. The tabs enter vertically during assembly. The default 0.20 mm clearance on each side makes a 5.40 mm socket for a 5 mm finger. The same allowance applies at the tip. Short edges, thin slabs, openings and contacts blocked by another part can limit where joints are placed.
+
+After trimming and joining, eligible pairs of planar mating faces get matching 1.2 mm square recesses, 0.3 mm deep at print scale. Use the recesses to line up the pieces during dry fitting. The marks also apply with fingers disabled. Rhino reports the number of finger joints and pairs of assembly marks.
 
 ## Export the reviewed kit
 
-Select the baked meshes you want to print, then run **FlatPackExportSTL**. For a whole plate, use **Select Objects** on its layer. Window selections can include bed outlines and labels. With an empty selection the command prompts you to select parts. **Parts** writes one STL per selected mesh. **GroupedPlates** writes one STL per selected plate containing exactly its selected pieces in their reviewed positions. Selecting parts across kits creates a separate subfolder per kit. The destination is a new **FlatPack-STL** folder. You can move or rotate pieces flat inside their plate outline before export. Keep each piece on its plate layer and its base at bed height. Mesh names carry the part IDs between the Rhino preview and the slicer.
+Select the baked meshes you want to print, then run **FlatPackExportSTL**. For a whole plate, use **Select Objects** on its layer. Window selections can include bed outlines and labels. With an empty selection the command prompts you to select parts. **Parts** writes one STL per selected mesh. **GroupedPlates** writes one STL per selected plate containing exactly its selected pieces in their reviewed positions. Selecting parts across kits creates a separate subfolder per kit. The destination is a new **FlatPack-STL** folder. You can move or rotate pieces flat inside their plate outline before export. If you move a piece onto another baked bed, export updates its plate layer. Export also levels small Z offsets and nudges pieces inside the bed outline by up to 0.25 mm total. These position corrections apply to the exported files. Mesh names carry the part IDs between the Rhino preview and the slicer.
 
 STL stores coordinates without units. Import in **millimetres**. Import a plate’s files together with relative positions preserved to reproduce its Rhino layout. Review thin details and local overhangs in your slicer before printing.
 

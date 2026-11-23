@@ -7,7 +7,7 @@ internal record PreviewSettings(double Scale, double Width, double Depth, double
     bool Fingers, double Clearance, bool UseSourceColors = true)
 {
     internal static PreviewSettings Defaults => new(PreviewDefaults.Scale,PreviewDefaults.Width,
-        PreviewDefaults.Depth,PreviewDefaults.Height,false,.20);
+        PreviewDefaults.Depth,PreviewDefaults.Height,true,.20);
 }
 
 internal sealed class PreviewDialog : Dialog<bool>

@@ -33,9 +33,18 @@ internal static class PrintFiles
                     if (!mesh.IsValid || !mesh.IsClosed || mesh.SolidOrientation()==0) throw new ArgumentException(obj.Name+" must be a closed oriented solid.");
                     if (mesh.SolidOrientation()<0) mesh.Flip(true,true,true);
                     var bounds = mesh.GetBoundingBox(true);
-                    if (Math.Abs(bounds.Min.Z)>.02 || bounds.Min.X<-.02 || bounds.Min.Y<-.02 ||
-                        bounds.Max.X>plate.Width+.02 || bounds.Max.Y>plate.Depth+.02)
-                        throw new ArgumentException(obj.Name+" is off the bed on "+plate.RelativeName);
+                    const double bedTolerance = .02;
+                    if (Math.Abs(bounds.Min.Z)>bedTolerance)
+                    {
+                        string direction = bounds.Min.Z < 0 ? "below" : "above";
+                        throw new ArgumentException(
+                            $"{obj.Name} is {Math.Abs(bounds.Min.Z):0.###} mm {direction} bed height on {plate.RelativeName}.");
+                    }
+                    double overflowX = Math.Max(-bounds.Min.X,bounds.Max.X-plate.Width);
+                    double overflowY = Math.Max(-bounds.Min.Y,bounds.Max.Y-plate.Depth);
+                    if (Math.Max(overflowX,overflowY)>bedTolerance)
+                        throw new ArgumentException(
+                            $"{obj.Name} extends {Math.Max(overflowX,overflowY):0.###} mm past the bed outline on {plate.RelativeName}.");
                     var label = new string(obj.Name.Select(c=>char.IsLetterOrDigit(c)||c=='-'?c:'_').ToArray());
                     count++;
                     if (project != null) project.Add(obj.Name,mesh);

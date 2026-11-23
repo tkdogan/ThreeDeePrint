@@ -31,6 +31,7 @@ internal static class Parts
         }
         components=SolidCleanup.Cut(components);
         if (fingers) FingerJoints.Apply(components,clearance);
+        AssemblyMarks.Apply(components);
         return components;
     }
 

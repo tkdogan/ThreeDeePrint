@@ -56,7 +56,7 @@ public sealed class FlatPackComponent : GH_Component
         p.AddNumberParameter("Bed width","W","Bed width in mm.",GH_ParamAccess.item,250);
         p.AddNumberParameter("Bed depth","D","Bed depth in mm.",GH_ParamAccess.item,210);
         p.AddNumberParameter("Build height","H","Maximum height in mm.",GH_ParamAccess.item,220);
-        p.AddBooleanParameter("Finger joints","J","Add alignment fingers to eligible wall-to-slab joints.",GH_ParamAccess.item,false);
+        p.AddBooleanParameter("Finger joints","J","Add alignment fingers to eligible wall-to-slab joints.",GH_ParamAccess.item,true);
         p.AddNumberParameter("Clearance","C","Finger clearance per side in mm.",GH_ParamAccess.item,.20);
         int colors = p.AddBooleanParameter("Use source colors","SC","Copy the Rhino source colors to the plate and assembly meshes when baking.",GH_ParamAccess.item,true);
         p[colors].Optional = true;
@@ -81,7 +81,7 @@ public sealed class FlatPackComponent : GH_Component
         }
         var geometry = new List<IGH_GeometricGoo>();
         double scale=50, height=220, clearance=.2;
-        bool fingers=false;
+        bool fingers=true;
         if (!da.GetDataList(0,geometry) || !da.GetData(1,ref scale) || !da.GetData(2,ref width) ||
             !da.GetData(3,ref depth) || !da.GetData(4,ref height) || !da.GetData(5,ref fingers) || !da.GetData(6,ref clearance)) return;
         useSourceColors = true;

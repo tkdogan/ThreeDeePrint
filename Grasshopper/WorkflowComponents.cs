@@ -19,7 +19,7 @@ public sealed class PreparePartsComponent : GH_Component
         p.AddGeometryParameter("Components","G","Model solids in Rhino document units.",GH_ParamAccess.list);
         p[0].DataMapping = GH_DataMapping.Flatten;
         p.AddNumberParameter("Scale","S","Scale denominator, e.g. 50 for 1:50.",GH_ParamAccess.item,50);
-        p.AddBooleanParameter("Finger joints","J","Cut eligible wall-to-slab alignment joints.",GH_ParamAccess.item,false);
+        p.AddBooleanParameter("Finger joints","J","Cut eligible wall-to-slab alignment joints.",GH_ParamAccess.item,true);
         p.AddNumberParameter("Clearance","C","Joint clearance per side in mm.",GH_ParamAccess.item,.2);
     }
     protected override void RegisterOutputParams(GH_OutputParamManager p)
@@ -31,7 +31,7 @@ public sealed class PreparePartsComponent : GH_Component
     {
         var geometry = new List<IGH_GeometricGoo>();
         double scale = 50, clearance = .2;
-        bool fingers = false;
+        bool fingers = true;
         if (!da.GetDataList(0,geometry) || !da.GetData(1,ref scale) || !da.GetData(2,ref fingers) || !da.GetData(3,ref clearance)) return;
         try
         {

@@ -8,6 +8,10 @@ namespace Go2Bed;
 internal static class FingerJoints
 {
     private const double Tolerance = .001;
+    private const double ContactTolerance = .30;
+    private const double MinimumDepth = .60;
+    private const double SocketBacking = .85;
+    private const double MinimumFingerThickness = .70;
 
     internal static void Apply(List<Component> components, double clearance)
     {
@@ -17,19 +21,19 @@ internal static class FingerJoints
         {
             var plate = boxes[receiver];
             double thickness = plate.Diagonal.Z;
-            if (thickness < 2 || thickness > Math.Min(plate.Diagonal.X,plate.Diagonal.Y)*.2) continue;
+            double depth = Math.Min(2, thickness-SocketBacking-clearance);
+            if (depth+Tolerance < MinimumDepth || thickness > Math.Min(plate.Diagonal.X,plate.Diagonal.Y)*.2) continue;
             for (int donor = 0; donor < components.Count; donor++)
             {
                 var panel = boxes[donor];
-                if (donor == receiver || panel.Diagonal.Z < 8 || Math.Abs(panel.Min.Z-plate.Max.Z) > .30) continue;
+                if (donor == receiver || panel.Diagonal.Z < 8 ||
+                    panel.Min.Z > plate.Max.Z+ContactTolerance || panel.Max.Z < plate.Max.Z-ContactTolerance) continue;
                 if (panel.Max.X < plate.Min.X || panel.Min.X > plate.Max.X ||
                     panel.Max.Y < plate.Min.Y || panel.Min.Y > plate.Max.Y) continue;
-                var candidates = Locations(components[donor].Solid,panel.Min.Z).ToList();
+                var candidates = Locations(components[donor].Solid,plate.Max.Z).ToList();
                 foreach (var (frame,halfWidth) in candidates)
                 {
-                    double depth = Math.Min(2, thickness-.85-clearance);
                     double floorZ = plate.Max.Z-frame.OriginZ;
-                    if (depth<1) continue;
                     var tab = new Box(frame,new Interval(-2.5,2.5),new Interval(-halfWidth,halfWidth),
                         new Interval(floorZ-depth,.35));
                     var socket = new Box(frame,new Interval(-2.5-clearance,2.5+clearance),
@@ -67,26 +71,29 @@ internal static class FingerJoints
         return slice.GetCorners().All(p => body.IsPointInside(p,Tolerance,true));
     }
 
-    private static IEnumerable<(Plane,double)> Locations(Brep body, double baseZ)
+    private static IEnumerable<(Plane,double)> Locations(Brep body, double slabTop)
     {
         foreach (var face in body.Faces)
         {
-            if (!face.TryGetPlane(out var basePlane,Tolerance) || Math.Abs(basePlane.ZAxis.Z)<.99999 ||
-                Math.Abs(basePlane.OriginZ-baseZ)>.02) continue;
+            if (!face.TryGetPlane(out var basePlane,Tolerance) ||
+                Math.Abs(basePlane.OriginZ-slabTop)>ContactTolerance) continue;
+            var normal = face.OrientationIsReversed ? -basePlane.ZAxis : basePlane.ZAxis;
+            if (normal.Z>-.99999) continue;
             var edges = face.AdjacentEdges().Select(i => body.Edges[i]).ToArray();
             var longest = edges.Where(e => e.IsLinear(Tolerance)).OrderByDescending(e=>e.GetLength()).FirstOrDefault();
             if (longest==null) continue;
             var x = longest.PointAtEnd-longest.PointAtStart;
             x.Z=0; if (!x.Unitize()) continue;
-            var frame = new Plane(new Point3d(basePlane.OriginX,basePlane.OriginY,baseZ),x,Vector3d.CrossProduct(Vector3d.ZAxis,x));
+            var frame = new Plane(basePlane.Origin,x,Vector3d.CrossProduct(Vector3d.ZAxis,x));
             var box = face.DuplicateFace(false).GetBoundingBox(frame);
             double length = box.Diagonal.X, width = box.Diagonal.Y;
-            if (length<12 || width<1.8 || width>length/3 || width>12) continue;
+            double halfWidth = Math.Min(width/2-.25,1.6);
+            if (length<12 || 2*halfWidth+Tolerance<MinimumFingerThickness || width>length/3 || width>12) continue;
             int n = Math.Clamp((int)Math.Floor(length/20),2,8);
             for (int i=0;i<n;i++)
             {
                 var center = frame.PointAt(box.Min.X+length*(i+.5)/n,box.Center.Y);
-                yield return (new Plane(center,frame.XAxis,frame.YAxis),Math.Min(width/2-.25,1.6));
+                yield return (new Plane(center,frame.XAxis,frame.YAxis),halfWidth);
             }
         }
     }
