@@ -5,15 +5,24 @@ using Rhino.Geometry;
 
 namespace Go2Bed;
 
+internal record SourceGroup(Guid Id, string? Name, int Size);
+
 internal record SourcePart(GeometryBase Geometry, string? Name, Guid Id, bool RepairBarnPanel = false,
-    string? LayerName = null, double? ModelTolerance = null, double? AngleTolerance = null)
+    string? LayerName = null, double? ModelTolerance = null, double? AngleTolerance = null,
+    IReadOnlyList<SourceGroup>? Groups = null)
 {
     internal static SourcePart FromObject(RhinoObject obj, bool barn = false)
     {
-        var layer = obj.Document.Layers[obj.Attributes.LayerIndex];
+        var doc = obj.Document;
+        var layer = doc.Layers[obj.Attributes.LayerIndex];
+        var groups = (obj.Attributes.GetGroupList() ?? Array.Empty<int>())
+            .Select(i => doc.Groups.FindIndex(i))
+            .Where(g => g != null && !g.IsDeleted)
+            .Select(g => new SourceGroup(g.Id, g.Name, doc.Groups.GroupMembers(g.Index)?.Length ?? 0))
+            .ToArray();
         return new SourcePart(obj.Geometry, obj.Attributes.Name, obj.Id,
             barn || layer.FullPath == "COMPARE - Simplified full size::Walls", layer.Name,
-            obj.Document.ModelAbsoluteTolerance, obj.Document.ModelAngleToleranceRadians);
+            doc.ModelAbsoluteTolerance, doc.ModelAngleToleranceRadians, groups);
     }
 }
 
@@ -25,11 +34,18 @@ internal static class Parts
     internal static List<Component> Clean(IEnumerable<SourcePart> objects, double factor, bool fingers, double clearance, bool pins = true)
     {
         var components = new List<Component>();
-        // Only original names determine trimming priority.
-        foreach (var (obj, name) in WithDisplayNames(objects.OrderBy(o => Priority(o.Name))))
+        // Only original names determine trimming priority. A group trims at its highest-priority member.
+        foreach (var cluster in Grouped(WithDisplayNames(objects.OrderBy(o => Priority(o.Name)))))
         {
-            try { components.Add(new Component(name,obj.Id,Solid(obj,factor))); }
-            catch (Exception ex) { throw new InvalidOperationException($"{name} ({obj.Id}): {ex.Message}",ex); }
+            var solids = new List<Brep>();
+            foreach (var (obj, name) in cluster.Members)
+            {
+                try { solids.Add(Solid(obj,factor)); }
+                catch (Exception ex) { throw new InvalidOperationException($"{name} ({obj.Id}): {ex.Message}",ex); }
+            }
+            var source = cluster.Members[0].Source.Id;
+            foreach (var solid in solids.Count == 1 ? solids.ToArray() : Union(cluster.Name,solids))
+                components.Add(new Component(cluster.Name,source,solid));
         }
         components=SolidCleanup.Cut(components);
         var jointed = fingers ? FingerJoints.Apply(components,clearance) : new HashSet<(int, int)>();
@@ -71,6 +87,63 @@ internal static class Parts
             nextByLayer[prefix] = number;
             yield return (source, name);
         }
+    }
+
+    // Fuses a group's solids so the rest of the pipeline sees one part. Members that do not
+    // touch stay separate solids and print as separate pieces.
+    private static Brep[] Union(string name, List<Brep> solids)
+    {
+        var fused = Brep.CreateBooleanUnion(solids,Tol);
+        if (fused == null || fused.Length == 0 || fused.Any(b => !b.IsValid || !b.IsSolid))
+            throw new InvalidOperationException($"Group {name}: its solids could not be unioned. Union them in Rhino and retry.");
+        foreach (var brep in fused)
+        {
+            brep.MergeCoplanarFaces(Tol,RhinoMath.ToRadians(.1));
+            if (brep.SolidOrientation == BrepSolidOrientation.Inward) brep.Flip();
+        }
+        if (fused.Length > 1)
+            RhinoApp.WriteLine($"Group {name} prints as {fused.Length} separate pieces because its solids do not all touch.");
+        return fused;
+    }
+
+    // Objects sharing any Rhino group fuse into one part, so nested and overlapping groups
+    // collapse into a single cluster. Clusters keep the order of their first member.
+    internal static List<(string Name, List<(SourcePart Source, string Name)> Members)> Grouped(
+        IEnumerable<(SourcePart Source, string Name)> named)
+    {
+        var items = named.ToList();
+        var parent = Enumerable.Range(0,items.Count).ToArray();
+        int Find(int i) { while (parent[i]!=i) i = parent[i] = parent[parent[i]]; return i; }
+        var firstWithGroup = new Dictionary<Guid,int>();
+        for (int i=0;i<items.Count;i++)
+        foreach (var group in items[i].Source.Groups ?? Array.Empty<SourceGroup>())
+        {
+            if (firstWithGroup.TryGetValue(group.Id,out int other)) parent[Find(i)] = Find(other);
+            else firstWithGroup.Add(group.Id,i);
+        }
+        var clusters = new List<(string Name, List<(SourcePart Source, string Name)> Members)>();
+        var byRoot = new Dictionary<int,int>();
+        for (int i=0;i<items.Count;i++)
+        {
+            int root = Find(i);
+            if (!byRoot.TryGetValue(root,out int index))
+            {
+                index = clusters.Count; byRoot.Add(root,index);
+                clusters.Add(("",new List<(SourcePart Source, string Name)>()));
+            }
+            clusters[index].Members.Add(items[i]);
+        }
+        for (int c=0;c<clusters.Count;c++)
+        {
+            var members = clusters[c].Members;
+            // The outermost named group names the part; otherwise its first member does.
+            var groupName = members.Count == 1 ? null : members
+                .SelectMany(m => m.Source.Groups ?? Array.Empty<SourceGroup>())
+                .Where(g => !string.IsNullOrWhiteSpace(g.Name))
+                .OrderByDescending(g => g.Size).Select(g => g.Name!.Trim()).FirstOrDefault();
+            clusters[c] = (groupName ?? members[0].Name, members);
+        }
+        return clusters;
     }
 
     private static int Priority(string? name)
