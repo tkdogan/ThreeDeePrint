@@ -12,7 +12,7 @@ internal static class AssemblyMarks
     private static readonly double[] SamplePositions = { .5, .25, .75, .125, .875 };
     private static readonly double[] FootprintSamples = { -HalfWidth - .15, 0, HalfWidth + .15 };
 
-    internal static void Apply(List<Component> components)
+    internal static void Apply(List<Component> components, ISet<(int, int)>? skip = null)
     {
         int count = 0;
         var bounds = components.Select(component => component.Solid.GetBoundingBox(true)).ToArray();
@@ -22,7 +22,7 @@ internal static class AssemblyMarks
             nearby.Inflate(MaxGap);
             for (int j = i + 1; j < components.Count; j++)
             {
-                if (!BoundingBox.Intersection(nearby, bounds[j]).IsValid ||
+                if (skip?.Contains((i, j)) == true || !BoundingBox.Intersection(nearby, bounds[j]).IsValid ||
                     !TryMarkPair(components[i].Solid, components[j].Solid, out var first, out var second))
                     continue;
                 components[i] = components[i] with { Solid = first };

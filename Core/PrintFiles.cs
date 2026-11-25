@@ -30,6 +30,8 @@ internal static class PrintFiles
                     mesh.Translate(Point3d.Origin-plate.Origin);
                     mesh.Scale(plate.MillimetersPerUnit);
                     mesh.Faces.ConvertQuadsToTriangles();
+                    mesh.Vertices.CombineIdentical(true,true); // Baked meshes are unwelded at creases for shading.
+                    mesh.Compact();
                     if (!mesh.IsValid || !mesh.IsClosed || mesh.SolidOrientation()==0) throw new ArgumentException(obj.Name+" must be a closed oriented solid.");
                     if (mesh.SolidOrientation()<0) mesh.Flip(true,true,true);
                     var bounds = mesh.GetBoundingBox(true);

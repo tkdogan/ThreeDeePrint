@@ -8,26 +8,27 @@ namespace Go2Bed;
 internal static class PrintLayout
 {
     internal static List<Placement> Solve(IEnumerable<SourcePart> objects, UnitSystem units, double scale,
-        double width, double depth, double height, bool fingers, double clearance)
+        double width, double depth, double height, bool fingers, double clearance, bool pins = true)
     {
-        return Pack(Prepare(objects,units,scale,fingers,clearance),width,depth,height);
+        return Pack(Prepare(objects,units,scale,fingers,clearance,pins),width,depth,height,clearance);
     }
 
-    internal static List<Component> Prepare(IEnumerable<SourcePart> objects, UnitSystem units, double scale, bool fingers, double clearance)
+    internal static List<Component> Prepare(IEnumerable<SourcePart> objects, UnitSystem units, double scale, bool fingers, double clearance, bool pins = true)
     {
         if (!double.IsFinite(scale) || scale <= 0) throw new ArgumentException("Invalid scale.");
-        if (fingers && !(clearance >= .05 && clearance <= .60)) throw new ArgumentException("Joint clearance must be 0.05 to 0.60 mm.");
+        if ((fingers || pins) && !(clearance >= .05 && clearance <= .60)) throw new ArgumentException("Joint clearance must be 0.05 to 0.60 mm.");
         if (units is UnitSystem.None or UnitSystem.CustomUnits or UnitSystem.Unset)
             throw new ArgumentException("Set the document's physical units first.");
         var mm = RhinoMath.UnitScale(units,UnitSystem.Millimeters);
-        return Parts.Clean(objects,mm/scale,fingers,clearance);
+        return Parts.Clean(objects,mm/scale,fingers,clearance,pins);
     }
 
-    internal static List<Placement> Pack(List<Component> components, double width, double depth, double height)
+    internal static List<Placement> Pack(List<Component> components, double width, double depth, double height, double seamClearance = .2)
     {
         if (!double.IsFinite(width) || !double.IsFinite(depth) || !double.IsFinite(height) ||
             width <= 6 || depth <= 6 || height <= 0) throw new ArgumentException("Invalid build volume.");
-        var parts = Parts.Orient(components,width-2*PlatePacking.Margin,depth-2*PlatePacking.Margin);
+        var parts = Parts.Orient(components,width-2*PlatePacking.Margin,depth-2*PlatePacking.Margin,
+            Math.Clamp(seamClearance,.05,.60));
         var layout = PlatePacking.Pack(parts,width,depth,height);
         if (layout.Count==0) throw new ArgumentException("No printable pieces at this scale.");
         return layout;
@@ -93,10 +94,10 @@ internal static class PrintLayout
                 var sourceId = entry.Part.Source;
                 var source = useSourceColors && sourceId != Guid.Empty ? doc.Objects.FindId(sourceId) : null;
                 var color = source?.Attributes.DrawColor(doc);
-                var printable = entry.Placed.DuplicateMesh(); printable.Scale(1/mm); printable.Translate(origin-Point3d.Origin);
+                var printable = Parts.Shaded(entry.Placed.DuplicateMesh()); printable.Scale(1/mm); printable.Translate(origin-Point3d.Origin);
                 Add(printable,plate,name,"Print",root.Id,sourceId,color);
                 visible.Union(printable.GetBoundingBox(true));
-                var assembled = entry.Part.Assembled.DuplicateMesh(); assembled.Scale(1/mm);
+                var assembled = Parts.Shaded(entry.Part.Assembled.DuplicateMesh()); assembled.Scale(1/mm);
                 Add(assembled,assembly,name,"Reference",root.Id,sourceId,color);
             }
             doc.Views.ActiveView?.ActiveViewport.ZoomBoundingBox(visible);

@@ -17,9 +17,9 @@ internal static class PreviewDefaults
     internal const double Scale = 50, Width = 250, Depth = 210, Height = 220;
 }
 
-public sealed class FlatPackPreview : Command
+public sealed class ToBedPreview : Command
 {
-    public override string EnglishName => "FlatPackPreview";
+    public override string EnglishName => "ToBedPreview";
     private PreviewSettings previous = PreviewSettings.Defaults;
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
@@ -50,10 +50,10 @@ public sealed class FlatPackPreview : Command
             }
             var root = Kit.BakeSettings(doc,inputs,settings);
             previous = settings;
-            RhinoApp.WriteLine($"Baked {root.FullPath}. Inspect the plate layers, then run FlatPackExportSTL.");
+            RhinoApp.WriteLine($"Baked {root.FullPath}. Inspect the plate layers, then run ToBedExportSTL.");
             return Result.Success;
         }
-        catch (Exception e) { RhinoApp.WriteLine("FlatPackPreview: "+e.Message); return Result.Failure; }
+        catch (Exception e) { RhinoApp.WriteLine("ToBedPreview: "+e.Message); return Result.Failure; }
     }
 
     private static PreviewSettings? ReadSettings()
@@ -69,29 +69,31 @@ public sealed class FlatPackPreview : Command
         joints.AddOption("Plain"); joints.AddOption("FingerJoints");
         var sourceColors = new OptionToggle(defaults.UseSourceColors,"Off","On");
         int colorOption = joints.AddOptionToggle("SourceColors",ref sourceColors);
+        var pins = new OptionToggle(defaults.Pins,"Off","On");
+        int pinOption = joints.AddOptionToggle("FilamentPins",ref pins);
         joints.SetDefaultString("FingerJoints"); joints.AcceptNothing(true);
         GetResult jointChoice;
         do { jointChoice = joints.Get(); }
-        while (jointChoice == GetResult.Option && joints.OptionIndex() == colorOption);
+        while (jointChoice == GetResult.Option && joints.OptionIndex() is var chosen && (chosen == colorOption || chosen == pinOption));
         if (jointChoice!=GetResult.Option && jointChoice!=GetResult.Nothing) return null;
         bool fingers=jointChoice==GetResult.Nothing || joints.Option().EnglishName=="FingerJoints";
         double clearance=defaults.Clearance;
-        if (fingers && RhinoGet.GetNumber("Finger clearance per side in mm",true,ref clearance,.05,.60)
+        if (RhinoGet.GetNumber("Joint clearance per side in mm",true,ref clearance,.05,.60)
             is not (Result.Success or Result.Nothing)) return null;
-        return new PreviewSettings(scale,width,depth,height,fingers,clearance,sourceColors.CurrentValue);
+        return new PreviewSettings(scale,width,depth,height,fingers,clearance,sourceColors.CurrentValue,pins.CurrentValue);
     }
 
 }
 
-public sealed class FlatPackExportSTL : Command
+public sealed class ToBedExportSTL : Command
 {
-    public override string EnglishName => "FlatPackExportSTL";
+    public override string EnglishName => "ToBedExportSTL";
     protected override Result RunCommand(RhinoDoc doc, RunMode mode) => ExportCommand.Run(doc,mode,false);
 }
 
-public sealed class FlatPackExportPrusa : Command
+public sealed class ToBedExportPrusa : Command
 {
-    public override string EnglishName => "FlatPackExportPrusa";
+    public override string EnglishName => "ToBedExportPrusa";
     protected override Result RunCommand(RhinoDoc doc, RunMode mode) => ExportCommand.Run(doc,mode,true);
 }
 

@@ -16,9 +16,9 @@ public static class Kit
 
     internal static Layer BakeSettings(RhinoDoc doc, RhinoObject[] objects, PreviewSettings settings, bool barn = false)
     {
-        var (scale,width,depth,height,fingers,clearance,useSourceColors) = settings;
+        var (scale,width,depth,height,fingers,clearance,useSourceColors,pins) = settings;
         var sources = objects.Select(o => SourcePart.FromObject(o,barn));
-        var layout = PrintLayout.Solve(sources,doc.ModelUnitSystem,scale,width,depth,height,fingers,clearance);
+        var layout = PrintLayout.Solve(sources,doc.ModelUnitSystem,scale,width,depth,height,fingers,clearance,pins);
         var bounds = BoundingBox.Empty;
         foreach (var obj in objects) bounds.Union(obj.Geometry.GetBoundingBox(true));
         return PrintLayout.Bake(doc,layout,width,depth,bounds,useSourceColors);

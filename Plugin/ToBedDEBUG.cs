@@ -5,15 +5,15 @@ using Rhino.DocObjects;
 namespace Go2Bed;
 
 // Included only in the Debug build. The sample is copied alongside the RHP.
-public sealed class FlatPackDEBUG : Command
+public sealed class ToBedDEBUG : Command
 {
-    public override string EnglishName => "FlatPackDEBUG";
+    public override string EnglishName => "ToBedDEBUG";
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
         try
         {
-            var buildDirectory = Path.GetDirectoryName(typeof(FlatPackDEBUG).Assembly.Location)!;
+            var buildDirectory = Path.GetDirectoryName(typeof(ToBedDEBUG).Assembly.Location)!;
             var path = Path.Combine(buildDirectory, "Barn_original_with_simplified_interior.3dm");
             var sample = doc.Path == path ? doc : RhinoDoc.Open(path, out _);
             if (sample == null) throw new IOException($"Could not open the debug sample at {path}.");

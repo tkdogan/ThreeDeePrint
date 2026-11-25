@@ -33,19 +33,19 @@
       <text>
         <locale_1033>Preview print plates</locale_1033>
       </text>
-      <script>! _FlatPackPreview</script>
+      <script>! _ToBedPreview</script>
     </macro_item>
     <macro_item guid="0e9a0ed1-419e-5a6e-b057-16b82dce1c83" bitmap_id="9e55c9f1-961b-5198-8cbf-6c88a3b79e62">
       <text>
         <locale_1033>Export STL</locale_1033>
       </text>
-      <script>! _FlatPackExportSTL</script>
+      <script>! _ToBedExportSTL</script>
     </macro_item>
     <macro_item guid="c30c16f9-f535-5231-a44f-a7ff6bc10e44" bitmap_id="7d069801-224f-5160-a2c2-f2df6419b87e">
       <text>
         <locale_1033>Export for Prusa</locale_1033>
       </text>
-      <script>! _FlatPackExportPrusa</script>
+      <script>! _ToBedExportPrusa</script>
     </macro_item>
   </macros>
   <bitmaps>

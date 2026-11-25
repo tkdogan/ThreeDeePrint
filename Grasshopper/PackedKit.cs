@@ -36,7 +36,7 @@ internal record PackedKit(PreparedKit Source, List<Placement> Layout, double Wid
             var origin=new Point3d((entry.Plate-1)*(width+15)*u,0,0);
             if (!beds.PathExists(path))
                 beds.Append(new GH_Curve(new Rectangle3d(new Plane(origin,Vector3d.ZAxis),width*u,depth*u).ToNurbsCurve()),path);
-            var mesh=entry.Placed.DuplicateMesh();
+            var mesh=Go2Bed.Parts.Shaded(entry.Placed.DuplicateMesh());
             mesh.Scale(u);
             mesh.Translate(origin-Point3d.Origin);
             meshes.Append(new GH_Mesh(mesh),path);

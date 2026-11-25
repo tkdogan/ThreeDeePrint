@@ -20,7 +20,7 @@
     <None Update="Go2Bed.rui" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="../brand/icons/go2bed.ico" LogicalName="Go2Bed.Icon.ico" />
     <None Update="Native/libGo2BedSolid.dylib;Native/Manifold-LICENSE.txt;Native/Manifold-AUTHORS.txt" TargetPath="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Compile Remove="FlatPackBarnPreview.cs" Condition="'$(Configuration)' != 'Debug'" />
+    <Compile Remove="ToBedDEBUG.cs" Condition="'$(Configuration)' != 'Debug'" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
     <None Include="../Barn_original_with_simplified_interior.3dm" Link="Barn_original_with_simplified_interior.3dm" CopyToOutputDirectory="PreserveNewest" />

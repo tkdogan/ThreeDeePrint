@@ -6,9 +6,9 @@ using Rhino.Input.Custom;
 
 namespace Go2Bed;
 
-public sealed class FlatPackHealBreps : Command
+public sealed class ToBedHealBreps : Command
 {
-    public override string EnglishName => "FlatPackHealBreps";
+    public override string EnglishName => "ToBedHealBreps";
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
@@ -47,12 +47,12 @@ public sealed class FlatPackHealBreps : Command
             catch (Exception ex)
             {
                 failed++;
-                RhinoApp.WriteLine($"FlatPackHealBreps: {label}: {ex.Message}");
+                RhinoApp.WriteLine($"ToBedHealBreps: {label}: {ex.Message}");
             }
         }
 
         if (healed > 0) doc.Views.Redraw();
-        RhinoApp.WriteLine($"FlatPackHealBreps: {healed} updated, {alreadySolid} already clean, {failed} failed.");
+        RhinoApp.WriteLine($"ToBedHealBreps: {healed} updated, {alreadySolid} already clean, {failed} failed.");
         return healed + alreadySolid > 0 ? Result.Success : Result.Failure;
     }
 }

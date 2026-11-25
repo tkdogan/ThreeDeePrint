@@ -22,7 +22,7 @@ internal record Component(string Name, Guid Source, Brep Solid);
 internal static class Parts
 {
     private const double Tol = .001; // All geometry here is at print scale, in millimetres.
-    internal static List<Component> Clean(IEnumerable<SourcePart> objects, double factor, bool fingers, double clearance)
+    internal static List<Component> Clean(IEnumerable<SourcePart> objects, double factor, bool fingers, double clearance, bool pins = true)
     {
         var components = new List<Component>();
         // Only original names determine trimming priority.
@@ -32,17 +32,19 @@ internal static class Parts
             catch (Exception ex) { throw new InvalidOperationException($"{name} ({obj.Id}): {ex.Message}",ex); }
         }
         components=SolidCleanup.Cut(components);
-        if (fingers) FingerJoints.Apply(components,clearance);
-        AssemblyMarks.Apply(components);
+        var jointed = fingers ? FingerJoints.Apply(components,clearance) : new HashSet<(int, int)>();
+        // Contacts that take pins need no marks. Fingered contacts keep theirs.
+        var pinned = pins ? AlignmentPins.Apply(components,clearance,jointed) : null;
+        AssemblyMarks.Apply(components,pinned);
         return components;
     }
 
-    internal static List<Part> Orient(IEnumerable<Component> components, double width, double depth)
+    internal static List<Part> Orient(IEnumerable<Component> components, double width, double depth, double seamClearance = .2)
     {
         var prepared = new List<Part>();
         foreach (var component in components)
         {
-            try { prepared.AddRange(Flatten(component.Solid,component.Name,component.Source,width,depth)); }
+            try { prepared.AddRange(Flatten(component.Solid,component.Name,component.Source,width,depth,seamClearance)); }
             catch (Exception ex) { throw new InvalidOperationException($"{component.Name}: {ex.Message}",ex); }
         }
         return prepared;
@@ -161,7 +163,17 @@ internal static class Parts
         return mesh;
     }
 
-    private static IEnumerable<Part> Flatten(Brep body, string name, Guid source, double width, double depth)
+    // ToMesh welds every vertex, which averages normals across sharp plate edges and smears the shading.
+    // Split vertices at creases for display; export re-welds before writing.
+    internal static Mesh Shaded(Mesh mesh)
+    {
+        mesh.Unweld(RhinoMath.ToRadians(30),true);
+        mesh.Normals.ComputeNormals();
+        mesh.Compact();
+        return mesh;
+    }
+
+    private static IEnumerable<Part> Flatten(Brep body, string name, Guid source, double width, double depth, double seamClearance)
     {
         if (body.GetVolume() < .001) yield break;
         const double contactBand = .05; // Millimetres above the lowest point at print scale.
@@ -206,26 +218,42 @@ internal static class Parts
             xform = turn*xform; flat.Transform(turn); box = flat.GetBoundingBox(true);
         }
         xform.TryGetInverse(out var inverse);
-        int nx = Math.Max(1,(int)Math.Ceiling((box.Diagonal.X-Tol)/width));
-        int ny = Math.Max(1,(int)Math.Ceiling((box.Diagonal.Y-Tol)/depth));
+        // A keyed piece overhangs its cell by the key length, so cells of split parts are shorter.
+        int Count(double size,double limit) => size-Tol<=limit ? 1 :
+            (int)Math.Ceiling((size-Tol)/Math.Max(limit-SeamKeys.Length,limit/2));
+        int nx = Count(box.Diagonal.X,width), ny = Count(box.Diagonal.Y,depth);
         if (Math.Min(box.Diagonal.Z, Math.Min(box.Diagonal.X,box.Diagonal.Y)) < .4)
         { RhinoApp.WriteLine($"Omitted sub-0.4 mm sliver of {name}"); yield break; }
-        for (int i=0;i<nx;i++)
-        for (int j=0;j<ny;j++)
+        var pieces = new List<Brep>();
+        if (nx*ny==1) pieces.Add(flat);
+        else if (SeamKeys.Split(flat,box,nx,ny,seamClearance,out int keys) is { } keyed)
         {
-            var low = box.PointAt((double)i/nx,(double)j/ny,0);
-            var high = box.PointAt((i+1.0)/nx,(j+1.0)/ny,1);
-            var clip = new BoundingBox(low-new Vector3d(i==0?1:0,j==0?1:0,1),
-                high+new Vector3d(i==nx-1?1:0,j==ny-1?1:0,1));
-            var pieces = nx*ny==1 ? new[]{flat} : Brep.CreateBooleanIntersection(flat,clip.ToBrep(),Tol);
-            if (pieces==null) throw new InvalidOperationException("Bed-size split failed.");
-            foreach (var piece in pieces.Where(p => p.GetVolume()>.001))
+            pieces = keyed;
+            RhinoApp.WriteLine($"Split {name} into {keyed.Count} pieces with {keys} seam keys.");
+        }
+        else
+        {
+            for (int i=0;i<nx;i++)
+            for (int j=0;j<ny;j++)
             {
-                var printable = ToMesh(piece);
-                var assembled = printable.DuplicateMesh(); assembled.Transform(inverse);
-                printable.Translate(Point3d.Origin-printable.GetBoundingBox(true).Min);
-                yield return new Part(name,source,assembled,printable);
+                var low = box.PointAt((double)i/nx,(double)j/ny,0);
+                var high = box.PointAt((i+1.0)/nx,(j+1.0)/ny,1);
+                var clip = new BoundingBox(low-new Vector3d(i==0?1:0,j==0?1:0,1),
+                    high+new Vector3d(i==nx-1?1:0,j==ny-1?1:0,1));
+                var cut = Brep.CreateBooleanIntersection(flat,clip.ToBrep(),Tol);
+                if (cut==null) throw new InvalidOperationException("Bed-size split failed.");
+                pieces.AddRange(cut.Where(p => p.GetVolume()>.001));
             }
+            RhinoApp.WriteLine($"Split {name} into {pieces.Count} pieces with plain seams. Keys did not fit.");
+        }
+        for (int index=0;index<pieces.Count;index++)
+        {
+            var printable = ToMesh(pieces[index]);
+            var assembled = printable.DuplicateMesh(); assembled.Transform(inverse);
+            printable.Translate(Point3d.Origin-printable.GetBoundingBox(true).Min);
+            // Pieces of one part share its name and take a letter each.
+            string label = pieces.Count==1 ? name : index<26 ? $"{name} {(char)('a'+index)}" : $"{name} {index+1}";
+            yield return new Part(label,source,assembled,printable);
         }
     }
 }

@@ -13,9 +13,10 @@ internal static class FingerJoints
     private const double SocketBacking = .85;
     private const double MinimumFingerThickness = .70;
 
-    internal static void Apply(List<Component> components, double clearance)
+    internal static HashSet<(int, int)> Apply(List<Component> components, double clearance)
     {
         int count = 0;
+        var jointed = new HashSet<(int, int)>();
         var boxes = components.Select(c => c.Solid.GetBoundingBox(true)).ToArray();
         for (int receiver = 0; receiver < components.Count; receiver++)
         {
@@ -55,11 +56,13 @@ internal static class FingerJoints
                         Math.Abs(joined[0].GetVolume()-oldPanel.GetVolume()-tab.X.Length*tab.Y.Length*(depth-floorZ)) > .05) continue;
                     components[donor] = components[donor] with {Solid=joined[0]};
                     components[receiver] = components[receiver] with {Solid=pocket[0]};
+                    jointed.Add((Math.Min(donor,receiver),Math.Max(donor,receiver)));
                     count++;
                 }
             }
         }
         RhinoApp.WriteLine($"Added {count} alignment fingers with matching sockets ({clearance:F2} mm clearance per side).");
+        return jointed;
     }
 
     private static bool OneSolid(Brep[] result) =>

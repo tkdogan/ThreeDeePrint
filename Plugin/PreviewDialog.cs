@@ -4,7 +4,7 @@ using Eto.Forms;
 namespace Go2Bed;
 
 internal record PreviewSettings(double Scale, double Width, double Depth, double Height,
-    bool Fingers, double Clearance, bool UseSourceColors = true)
+    bool Fingers, double Clearance, bool UseSourceColors = true, bool Pins = true)
 {
     internal static PreviewSettings Defaults => new(PreviewDefaults.Scale,PreviewDefaults.Width,
         PreviewDefaults.Depth,PreviewDefaults.Height,true,.20);
@@ -14,9 +14,10 @@ internal sealed class PreviewDialog : Dialog<bool>
 {
     private readonly NumericStepper scale, width, depth, height, clearance;
     private readonly CheckBox fingers = new() { Text = "Add wall-to-slab fingers" };
+    private readonly CheckBox pins = new() { Text = "Add filament pin holes (1.75 mm)" };
     private readonly CheckBox sourceColors = new() { Text = "Use source colors" };
     internal PreviewSettings Values => new(scale.Value,width.Value,
-        depth.Value,height.Value,fingers.Checked==true,clearance.Value,sourceColors.Checked==true);
+        depth.Value,height.Value,fingers.Checked==true,clearance.Value,sourceColors.Checked==true,pins.Checked==true);
 
     internal PreviewDialog(PreviewSettings initial)
     {
@@ -30,8 +31,9 @@ internal sealed class PreviewDialog : Dialog<bool>
         clearance = Number(initial.Clearance,.05,.60,.05,2);
         fingers.Checked = initial.Fingers;
         sourceColors.Checked = initial.UseSourceColors;
-        clearance.Enabled = initial.Fingers;
-        fingers.CheckedChanged += (_,_) => clearance.Enabled = fingers.Checked==true;
+        pins.Checked = initial.Pins;
+        // Seam keys on split parts use the clearance too, so it stays editable.
+
 
         var layout = new DynamicLayout {Spacing = new Size(10,7)};
         layout.AddRow("Scale  1 :",scale);
@@ -39,6 +41,7 @@ internal sealed class PreviewDialog : Dialog<bool>
         layout.AddRow("Bed depth (mm)",depth);
         layout.AddRow("Build height (mm)",height);
         layout.AddRow(null,fingers);
+        layout.AddRow(null,pins);
         layout.AddRow("Clearance per side (mm)",clearance);
         layout.AddRow(null,sourceColors);
         DefaultButton = new Button {Text="Bake preview"};
