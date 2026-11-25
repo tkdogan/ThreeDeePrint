@@ -446,6 +446,9 @@ internal static class Parts
     // Split vertices at creases for display; export re-welds before writing.
     internal static Mesh Shaded(Mesh mesh)
     {
+        // Baked meshes are scaled to model units and placed far from the origin; single-precision
+        // vertices there can merge thin triangles and open the mesh.
+        mesh.Vertices.UseDoublePrecisionVertices = true;
         mesh.Unweld(RhinoMath.ToRadians(30),true);
         mesh.Normals.ComputeNormals();
         mesh.Compact();

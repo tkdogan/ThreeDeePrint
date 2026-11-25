@@ -9,6 +9,39 @@ internal record ExportPlate(string RelativeName, double Width, double Depth, IEn
 
 internal static class PrintFiles
 {
+    private const double GapTolerance = .005; // Millimetres; hairline gaps closed before export.
+    private const double MaxHoleLength = 2;  // Millimetres of naked edge per hole that may be filled.
+
+    // Welds a baked mesh back into one closed solid. Meshes baked far from the origin in single
+    // precision can open hairline gaps; those are closed here. Anything larger is reported.
+    private static void Close(Mesh mesh, string name)
+    {
+        mesh.Faces.ConvertQuadsToTriangles();
+        mesh.Vertices.CombineIdentical(true,true); // Baked meshes are unwelded at creases for shading.
+        mesh.Compact();
+        if (IsSolid(mesh)) return;
+        mesh.Vertices.Align(GapTolerance);
+        mesh.Vertices.CombineIdentical(true,true);
+        mesh.Faces.CullDegenerateFaces();
+        mesh.Vertices.CullUnused();
+        mesh.Compact();
+        var holes = mesh.GetNakedEdges() ?? Array.Empty<Polyline>();
+        if (holes.Length > 0 && holes.All(h => h.Length <= MaxHoleLength)) mesh.FillHoles();
+        mesh.UnifyNormals();
+        mesh.Compact();
+        if (IsSolid(mesh)) return;
+        holes = mesh.GetNakedEdges() ?? Array.Empty<Polyline>();
+        int nonManifold = Enumerable.Range(0,mesh.TopologyEdges.Count).Count(i => mesh.TopologyEdges.GetConnectedFaces(i).Length > 2);
+        string why = holes.Length > 0
+            ? $"it has {holes.Length} open hole{(holes.Length==1?"":"s")}, the largest with {holes.Max(h => h.Length):0.##} mm of open edge"
+            : nonManifold > 0 ? $"{nonManifold} of its edges are shared by more than two faces"
+            : !mesh.IsValid ? "Rhino reports it as an invalid mesh" : "its faces are not oriented consistently";
+        throw new ArgumentException($"{name} is not a closed solid mesh: {why}. " +
+            "Bake the kit again with BedLayout, or run ShowEdges on the piece to see the gaps.");
+    }
+
+    private static bool IsSolid(Mesh mesh) => mesh.IsValid && mesh.IsClosed && mesh.SolidOrientation() != 0;
+
     internal static string Write(IEnumerable<ExportPlate> plates,string parent,bool groupByPlate,bool prusa,bool slice)
     {
         if (!Directory.Exists(parent)) throw new DirectoryNotFoundException(parent);
@@ -29,10 +62,7 @@ internal static class PrintFiles
                     var mesh = obj.Mesh.DuplicateMesh();
                     mesh.Translate(Point3d.Origin-plate.Origin);
                     mesh.Scale(plate.MillimetersPerUnit);
-                    mesh.Faces.ConvertQuadsToTriangles();
-                    mesh.Vertices.CombineIdentical(true,true); // Baked meshes are unwelded at creases for shading.
-                    mesh.Compact();
-                    if (!mesh.IsValid || !mesh.IsClosed || mesh.SolidOrientation()==0) throw new ArgumentException(obj.Name+" must be a closed oriented solid.");
+                    Close(mesh,obj.Name);
                     if (mesh.SolidOrientation()<0) mesh.Flip(true,true,true);
                     var bounds = mesh.GetBoundingBox(true);
                     const double bedTolerance = .02;
