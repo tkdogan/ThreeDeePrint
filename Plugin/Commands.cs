@@ -17,9 +17,9 @@ internal static class PreviewDefaults
     internal const double Scale = 50, Width = 250, Depth = 210, Height = 220;
 }
 
-public sealed class ToBedPreview : Command
+public sealed class BedLayout : Command
 {
-    public override string EnglishName => "ToBedPreview";
+    public override string EnglishName => "BedLayout";
     private PreviewSettings previous = PreviewSettings.Defaults;
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
@@ -50,12 +50,12 @@ public sealed class ToBedPreview : Command
             }
             var root = Kit.BakeSettings(doc,inputs,settings);
             previous = settings;
-            RhinoApp.WriteLine($"Baked {root.FullPath}. Inspect the plate layers, then run ToBedExportSTL.");
+            RhinoApp.WriteLine($"Baked {root.FullPath}. Inspect the plate layers, then run BedSTL.");
             return Result.Success;
         }
         catch (Exception e)
         {
-            RhinoApp.WriteLine("ToBedPreview: "+e.Message);
+            RhinoApp.WriteLine("BedLayout: "+e.Message);
             SelectCulprits(doc,e);
             return Result.Failure;
         }
@@ -102,15 +102,15 @@ public sealed class ToBedPreview : Command
 
 }
 
-public sealed class ToBedExportSTL : Command
+public sealed class BedSTL : Command
 {
-    public override string EnglishName => "ToBedExportSTL";
+    public override string EnglishName => "BedSTL";
     protected override Result RunCommand(RhinoDoc doc, RunMode mode) => ExportCommand.Run(doc,mode,false);
 }
 
-public sealed class ToBedExportPrusa : Command
+public sealed class BedPrusa : Command
 {
-    public override string EnglishName => "ToBedExportPrusa";
+    public override string EnglishName => "BedPrusa";
     protected override Result RunCommand(RhinoDoc doc, RunMode mode) => ExportCommand.Run(doc,mode,true);
 }
 

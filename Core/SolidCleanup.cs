@@ -74,7 +74,7 @@ internal static class SolidCleanup
             : !oriented ? "its faces are not oriented consistently" : "it encloses no volume";
         throw new PartException($"Boolean cleanup rejected {Describe(source,i)}: its mesh is not a valid solid because {why}. {MeshReport(mesh)} " +
             "Typical causes are self-intersections, faces that touch along an edge or at a point, or two solids in one group that only touch. " +
-            "Run Check and ShowEdges on it, or ToBedHealBreps.",source[i].Objects);
+            "Run Check and ShowEdges on it, or BedHeal.",source[i].Objects);
     }
 
     private static Mesh[] Subtract(List<Component> source,int i,Mesh mesh,List<(Mesh Mesh,BoundingBox Box)> cutters,List<int> overlapping)

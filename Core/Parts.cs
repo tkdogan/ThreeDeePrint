@@ -452,13 +452,32 @@ internal static class Parts
         return mesh;
     }
 
+    // Cuts off whatever lies below the bed plane z = 0, so the part rests on its whole base.
+    // Returns null if the cut does not leave one clean solid.
+    private static Brep? FlattenBase(Brep placed)
+    {
+        var bb = placed.GetBoundingBox(true);
+        var below = new BoundingBox(bb.Min - new Vector3d(1,1,1), new Point3d(bb.Max.X+1,bb.Max.Y+1,0)).ToBrep();
+        var cut = Brep.CreateBooleanDifference(placed, below, Tol);
+        if (cut is not { Length: 1 } || !cut[0].IsValid || !cut[0].IsSolid) return null;
+        var merged = cut[0].DuplicateBrep();
+        if (merged.MergeCoplanarFaces(Tol, RhinoMath.ToRadians(.1)) && merged.IsSolid && MeshesWatertight(merged)) return merged;
+        return MeshesWatertight(cut[0]) ? cut[0] : null;
+    }
+
     private static IEnumerable<Part> Flatten(Brep body, string name, Guid source, double width, double depth, double seamClearance)
     {
         if (body.GetVolume() < .001) yield break;
         const double contactBand = .05; // Millimetres above the lowest point at print scale.
+        // Modelled faces that should be coplanar are often stepped by a few tenths of a millimetre,
+        // and trimming can leave slivers below them. A face still counts as a base when what lies
+        // below it is at most this deep and small in volume; that material is cut off.
+        const double flatBand = .5;
+        const double maxCutShare = .02;
         double contactNormal = Math.Cos(2 * Math.PI / 180);
+        double volume = body.GetVolume();
         var mesh = ToMesh(body);
-        var candidates = new List<(Transform Frame,double Contact,double Overhang,double Footprint)>();
+        var candidates = new List<(Transform Frame,double Contact,bool Cut,double Overhang,double Footprint)>();
         foreach (var face in body.Faces)
         {
             if (!face.TryGetPlane(out var plane, Tol)) continue;
@@ -469,26 +488,39 @@ internal static class Parts
             var frame = new Plane(plane.Origin, along, Vector3d.CrossProduct(-n,along));
             var transform = Transform.PlaneToPlane(frame, Plane.WorldXY);
             var bounds = mesh.GetBoundingBox(transform);
-            if (Math.Abs(bounds.Min.Z) > .01) continue;
-            double contact = 0, overhang = 0;
+            if (bounds.Min.Z < -flatBand) continue;
+            double contact = 0, overhang = 0, below = 0;
             foreach (var tri in mesh.Faces)
             {
                 var a = transform * mesh.Vertices.Point3dAt(tri.A);
                 var b = transform * mesh.Vertices.Point3dAt(tri.B);
                 var c = transform * mesh.Vertices.Point3dAt(tri.C);
                 var cross = Vector3d.CrossProduct(b-a,c-a);
-                // Sum the projected area of all near-horizontal underside triangles in the bed band.
-                if (Math.Max(a.Z,Math.Max(b.Z,c.Z)) <= bounds.Min.Z + contactBand &&
-                    cross.Z < -contactNormal * cross.Length) contact -= cross.Z/2;
+                // Volume under the face's plane, from each triangle's projected area and depth.
+                below -= cross.Z/2 * Math.Max(0, -(a.Z+b.Z+c.Z)/3);
+                // Sum the projected area of all near-horizontal underside triangles at the bed.
+                if (Math.Max(a.Z,Math.Max(b.Z,c.Z)) <= contactBand && cross.Z < -contactNormal * cross.Length)
+                    contact -= cross.Z/2;
                 else if (cross.Z < -.7071*cross.Length) overhang -= cross.Z/2;
             }
-            if (contact>0) candidates.Add((transform, contact, overhang, bounds.Diagonal.X*bounds.Diagonal.Y));
+            if (contact <= 0 || below > maxCutShare*volume) continue;
+            candidates.Add((transform, contact, bounds.Min.Z < -contactBand, overhang, bounds.Diagonal.X*bounds.Diagonal.Y));
         }
         if (candidates.Count == 0) throw new InvalidOperationException("No supporting planar face.");
-        var xform = candidates.OrderByDescending(c => Math.Round(c.Contact,1))
-            .ThenBy(c => Math.Round(c.Overhang,1)).ThenBy(c => c.Footprint).First().Frame;
-        var flat = body.DuplicateBrep();
-        flat.Transform(xform);
+        // A part is only cut when that gives it at least 10% more bed contact than any uncut base.
+        Transform xform = Transform.Unset;
+        Brep? flat = null;
+        foreach (var candidate in candidates.OrderByDescending(c => Math.Round(c.Cut ? c.Contact/1.1 : c.Contact))
+            .ThenBy(c => c.Cut).ThenBy(c => Math.Round(c.Overhang,1)).ThenBy(c => c.Footprint))
+        {
+            var placed = body.DuplicateBrep();
+            placed.Transform(candidate.Frame);
+            flat = candidate.Cut ? FlattenBase(placed) : placed;
+            if (flat == null) continue;
+            xform = candidate.Frame;
+            break;
+        }
+        if (flat == null) throw new InvalidOperationException("No supporting planar face could be cut flat.");
         var box = flat.GetBoundingBox(true);
         int Tiles(double w,double h) => (int)Math.Ceiling((w-Tol)/width)*(int)Math.Ceiling((h-Tol)/depth);
         if (Tiles(box.Diagonal.Y,box.Diagonal.X) < Tiles(box.Diagonal.X,box.Diagonal.Y))

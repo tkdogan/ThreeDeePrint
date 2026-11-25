@@ -18,6 +18,8 @@ internal static class FingerJoints
         int count = 0;
         var jointed = new HashSet<(int, int)>();
         var boxes = components.Select(c => c.Solid.GetBoundingBox(true)).ToArray();
+        // Only walls take fingers: a tab on a roof or slab would stick out of the face it prints on.
+        var walls = components.Select(c => IsWall(c.Solid)).ToArray();
         for (int receiver = 0; receiver < components.Count; receiver++)
         {
             var plate = boxes[receiver];
@@ -27,7 +29,7 @@ internal static class FingerJoints
             for (int donor = 0; donor < components.Count; donor++)
             {
                 var panel = boxes[donor];
-                if (donor == receiver || panel.Diagonal.Z < 8 ||
+                if (donor == receiver || !walls[donor] || panel.Diagonal.Z < 8 ||
                     panel.Min.Z > plate.Max.Z+ContactTolerance || panel.Max.Z < plate.Max.Z-ContactTolerance) continue;
                 if (panel.Max.X < plate.Min.X || panel.Min.X > plate.Max.X ||
                     panel.Max.Y < plate.Min.Y || panel.Min.Y > plate.Max.Y) continue;
@@ -63,6 +65,25 @@ internal static class FingerJoints
         }
         RhinoApp.WriteLine($"Added {count} alignment fingers with matching sockets ({clearance:F2} mm clearance per side).");
         return jointed;
+    }
+
+    // A wall's largest planar area faces sideways, so the vertical tabs lie in the plane it prints on.
+    // Areas are summed by direction because cleanup can leave one flat side as several faces.
+    private static bool IsWall(Brep body)
+    {
+        var areas = new Dictionary<(long,long,long),(double Area,Vector3d Normal)>();
+        foreach (var face in body.Faces)
+        {
+            if (!face.TryGetPlane(out var plane,Tolerance)) continue;
+            var n = plane.ZAxis;
+            if (n.X < -1e-6 || (Math.Abs(n.X) <= 1e-6 && (n.Y < -1e-6 || (Math.Abs(n.Y) <= 1e-6 && n.Z < 0)))) n = -n;
+            var key = ((long)Math.Round(n.X*100),(long)Math.Round(n.Y*100),(long)Math.Round(n.Z*100));
+            var area = AreaMassProperties.Compute(face,true,false,false,false)?.Area ?? 0;
+            var sum = areas.GetValueOrDefault(key);
+            areas[key] = (sum.Area+area,n);
+        }
+        if (areas.Count == 0) return false;
+        return Math.Abs(areas.Values.MaxBy(a => a.Area).Normal.Z) < Math.Sin(2*Math.PI/180);
     }
 
     private static bool OneSolid(Brep[] result) =>

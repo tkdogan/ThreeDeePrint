@@ -6,9 +6,9 @@ using Rhino.Input.Custom;
 
 namespace Go2Bed;
 
-public sealed class ToBedHealBreps : Command
+public sealed class BedHeal : Command
 {
-    public override string EnglishName => "ToBedHealBreps";
+    public override string EnglishName => "BedHeal";
 
     protected override Result RunCommand(RhinoDoc doc, RunMode mode)
     {
@@ -47,12 +47,12 @@ public sealed class ToBedHealBreps : Command
             catch (Exception ex)
             {
                 failed++;
-                RhinoApp.WriteLine($"ToBedHealBreps: {label}: {ex.Message}");
+                RhinoApp.WriteLine($"BedHeal: {label}: {ex.Message}");
             }
         }
 
         if (healed > 0) doc.Views.Redraw();
-        RhinoApp.WriteLine($"ToBedHealBreps: {healed} updated, {alreadySolid} already clean, {failed} failed.");
+        RhinoApp.WriteLine($"BedHeal: {healed} updated, {alreadySolid} already clean, {failed} failed.");
         return healed + alreadySolid > 0 ? Result.Success : Result.Failure;
     }
 }

@@ -19,7 +19,7 @@
     <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
     <None Update="Go2Bed.rui" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="../brand/icons/go2bed.ico" LogicalName="Go2Bed.Icon.ico" />
-    <Compile Remove="ToBedDEBUG.cs" Condition="'$(Configuration)' != 'Debug'" />
+    <Compile Remove="BedTest.cs" Condition="'$(Configuration)' != 'Debug'" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
     <None Include="../Barn_original_with_simplified_interior.3dm" Link="Barn_original_with_simplified_interior.3dm" CopyToOutputDirectory="PreserveNewest" />

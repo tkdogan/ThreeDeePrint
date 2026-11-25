@@ -6,11 +6,11 @@ Turn separate architectural solids into flat-packed print kits. Preview each Pru
 
 | Command | What it does | Availability |
 | --- | --- | --- |
-| `ToBedPreview` | Heals Brep copies, then scales and packs the selected components onto print beds. Bakes numbered plate meshes and an assembly reference into the Rhino document. Settings include scale, build volume, optional finger joints, and source colors. | All builds |
-| `ToBedHealBreps` | Repairs selected Breps, joins matching naked edges, caps planar openings, and merges coplanar faces. Replaces document geometry when the result is a valid solid. | All builds |
-| `ToBedExportSTL` | Exports selected baked print meshes as one STL per piece (`Parts`) or one STL per plate (`GroupedPlates`), using the reviewed positions on the plate. | All builds |
-| `ToBedExportPrusa` | Writes an editable PrusaSlicer 3MF project for each selected plate using the MK4S preset. `ProjectAndBGCode` also runs the installed PrusaSlicer to generate binary G-code. | All builds |
-| `ToBedDEBUG` | Opens the bundled barn sample and bakes its simplified exterior and interior components at 1:50 for the MK4S without selection or settings prompts. Each run creates a numbered kit. | Debug builds only |
+| `BedLayout` | Heals Brep copies, then scales and packs the selected components onto print beds. Bakes numbered plate meshes and an assembly reference into the Rhino document. Settings include scale, build volume, optional finger joints, and source colors. | All builds |
+| `BedHeal` | Repairs selected Breps, joins matching naked edges, caps planar openings, and merges coplanar faces. Replaces document geometry when the result is a valid solid. | All builds |
+| `BedSTL` | Exports selected baked print meshes as one STL per piece (`Parts`) or one STL per plate (`GroupedPlates`), using the reviewed positions on the plate. | All builds |
+| `BedPrusa` | Writes an editable PrusaSlicer 3MF project for each selected plate using the MK4S preset. `ProjectAndBGCode` also runs the installed PrusaSlicer to generate binary G-code. | All builds |
+| `BedTest` | Opens the bundled barn sample and bakes its simplified exterior and interior components at 1:50 for the MK4S without selection or settings prompts. Each run creates a numbered kit. | Debug builds only |
 
 ## Run from Rider on macOS
 
@@ -43,8 +43,8 @@ Grasshopper exports use the wired layout directly. To export manual edits to bak
 
 ## Bake and review
 
-1. Select the wall, slab, or other component objects and run **ToBedPreview** to open the settings dialog. If you start the command without a component selection, select the objects at the prompt and press **Enter**.
-2. Set the scale denominator and build volume. **Add wall-to-slab fingers** and **Add filament pin holes** are enabled by default. Adjust the **clearance per side** in millimetres or uncheck either box. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints.
+1. Select the wall, slab, or other component objects and run **BedLayout** to open the settings dialog. If you start the command without a component selection, select the objects at the prompt and press **Enter**.
+2. Set the scale denominator and build volume. **Add wall-to-slab fingers** and **Add filament pin holes** are enabled by default. Adjust the **clearance per side** in millimetres or uncheck either box. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints. Each part lies on its largest flat face. If slivers or small modelling steps sit up to 0.5 mm below that face, they are trimmed off, as long as the trim removes at most 2% of the part and gives it at least 10% more bed contact.
 3. Expand **3D Printer → Kit 01** in Layers. Each **Plate** layer contains its bed outline, label and numbered meshes at physical print size. The viewport zooms to the plates. Toggle the plate layers to inspect them individually. Turn on **Assembly reference**, select its objects and use Zoom Selected to see the numbered pieces in their assembled positions. The original building stays in the document.
 4. Save the Rhino document to keep the preview. Each new bake creates a separate numbered kit. Preview creates no STL files.
 
@@ -54,7 +54,7 @@ Go2Bed keeps existing object names. For unnamed objects, it numbers parts by the
 
 ### Alignment joints
 
-Finger joints are the default. Eligible lower panel edges get rows of 5 mm wide tabs and matching blind sockets in the horizontal slab underneath. The tabs enter vertically during assembly. The default 0.20 mm clearance on each side makes a 5.40 mm socket for a 5 mm finger. The same allowance applies at the tip. Short edges, thin slabs, openings and contacts blocked by another part can limit where joints are placed.
+Finger joints are the default. Eligible lower edges of walls (parts whose largest flat side is vertical) get rows of 5 mm wide tabs and matching blind sockets in the horizontal slab underneath. The tabs enter vertically during assembly. The default 0.20 mm clearance on each side makes a 5.40 mm socket for a 5 mm finger. The same allowance applies at the tip. Short edges, thin slabs, openings and contacts blocked by another part can limit where joints are placed.
 
 Filament pins cover the contacts that fingers do not reach, in any orientation. Each pair of planar mating faces gets up to two matching blind holes, placed as far apart as the contact allows. Push a short offcut of 1.75 mm filament into each hole before gluing. The holes are 2.0 mm across at the default clearance and up to 3 mm deep, and always keep 0.6 mm of material around and behind them. Contacts with fingers get no pins.
 
@@ -66,7 +66,7 @@ A part longer than the bed is split into pieces named with a letter each, such a
 
 ## Export the reviewed kit
 
-Select the baked meshes you want to print, then run **ToBedExportSTL**. For a whole plate, use **Select Objects** on its layer. Window selections can include bed outlines and labels. With an empty selection the command prompts you to select parts. **Parts** writes one STL per selected mesh. **GroupedPlates** writes one STL per selected plate containing exactly its selected pieces in their reviewed positions. Selecting parts across kits creates a separate subfolder per kit. The destination is a new **FlatPack-STL** folder. You can move or rotate pieces flat inside their plate outline before export. If you move a piece onto another baked bed, export updates its plate layer. Export also levels small Z offsets and nudges pieces inside the bed outline by up to 0.25 mm total. These position corrections apply to the exported files. Mesh names carry the part IDs between the Rhino preview and the slicer.
+Select the baked meshes you want to print, then run **BedSTL**. For a whole plate, use **Select Objects** on its layer. Window selections can include bed outlines and labels. With an empty selection the command prompts you to select parts. **Parts** writes one STL per selected mesh. **GroupedPlates** writes one STL per selected plate containing exactly its selected pieces in their reviewed positions. Selecting parts across kits creates a separate subfolder per kit. The destination is a new **FlatPack-STL** folder. You can move or rotate pieces flat inside their plate outline before export. If you move a piece onto another baked bed, export updates its plate layer. Export also levels small Z offsets and nudges pieces inside the bed outline by up to 0.25 mm total. These position corrections apply to the exported files. Mesh names carry the part IDs between the Rhino preview and the slicer.
 
 STL stores coordinates without units. Import in **millimetres**. Import a plate’s files together with relative positions preserved to reproduce its Rhino layout. Review thin details and local overhangs in your slicer before printing.
 
@@ -74,13 +74,13 @@ STL stores coordinates without units. Import in **millimetres**. Import a plate�
 
 ## Export directly for the Prusa MK4S
 
-Select the baked pieces and run **ToBedExportPrusa**. **Project** writes one editable PrusaSlicer project (`.3mf`) per selected plate. **ProjectAndBGCode** also runs the installed Mac PrusaSlicer and writes the matching binary G-code (`.bgcode`) for the printer. Both modes use the positions on the Rhino plate layers. The project embeds the Original Prusa MK4S high-flow 0.4 mm nozzle, Generic PLA and 0.20 mm STRUCTURAL presets. If your hardware or material differs, open the project, change the preset, and slice again.
+Select the baked pieces and run **BedPrusa**. **Project** writes one editable PrusaSlicer project (`.3mf`) per selected plate. **ProjectAndBGCode** also runs the installed Mac PrusaSlicer and writes the matching binary G-code (`.bgcode`) for the printer. Both modes use the positions on the Rhino plate layers. The project embeds the Original Prusa MK4S high-flow 0.4 mm nozzle, Generic PLA and 0.20 mm STRUCTURAL presets. If your hardware or material differs, open the project, change the preset, and slice again.
 
 [Example PrusaSlicer projects and printer files](Barn-plugin-preview/PrusaSlicer/)
 
 ## Source and build
 
-Run `dotnet build Plugin/Go2Bed.csproj -c Release -t:Yak` to build both plug-ins and generate the Yak distribution under `dist`. It uses the `yak` tool from Rhino 8; pass `-p:YakExe=<path>` to use another one. The [Go2Bed icon set](brand/go2bed-icon-set.png) uses interlocking walls for the package and Grasshopper category, and separated panels for the Flat Pack component. In Rhino, open the **Go2Bed** toolbar for Preview, Export STL and Export for Prusa. The package includes the [Rhino toolbar file](Plugin/Go2Bed.rui).
+Run `packaging/build-mac.sh` to build both plug-ins and write `Go2Bed.macrhi` and the Yak package to `dist`. It runs `dotnet build Plugin/Go2Bed.csproj -c Release -t:Yak` and uses the `yak` tool from Rhino 8; pass `-p:YakExe=<path>` to use another one. The [Go2Bed icon set](brand/go2bed-icon-set.png) uses interlocking walls for the package and Grasshopper category, and separated panels for the Flat Pack component. In Rhino, open the **Go2Bed** toolbar for Lay out print plates, Export STL and Export for Prusa. The package includes the [Rhino toolbar file](Plugin/Go2Bed.rui).
 
 Run `dotnet build Go2Bed.sln -c Release` to build the solution. The Rhino plug-in is written to `Plugin/bin/Release/net7.0/Go2Bed.rhp` and the Mac installer to `dist/Go2Bed.macrhi`.
 
