@@ -7,6 +7,14 @@
       "environmentVariables": {
         "RHINO_PACKAGE_DIRS": "$(TargetDir)"
       }
+    },
+    "Rhino 9 — Go2Bed": {
+      "commandName": "Executable",
+      "executablePath": "/Applications/Rhino 9.app/Contents/MacOS/Rhinoceros",
+      "workingDirectory": "$(TargetDir)",
+      "environmentVariables": {
+        "RHINO_PACKAGE_DIRS": "$(TargetDir)"
+      }
     }
   }
 }
