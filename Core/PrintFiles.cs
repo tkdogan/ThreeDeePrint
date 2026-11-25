@@ -25,6 +25,7 @@ internal static class PrintFiles
         mesh.Faces.CullDegenerateFaces();
         mesh.Vertices.CullUnused();
         mesh.Compact();
+        if (SplitTJunctions(mesh)) mesh.Compact();
         var holes = mesh.GetNakedEdges() ?? Array.Empty<Polyline>();
         if (holes.Length > 0 && holes.All(h => h.Length <= MaxHoleLength)) mesh.FillHoles();
         mesh.UnifyNormals();
@@ -38,6 +39,55 @@ internal static class PrintFiles
             : !mesh.IsValid ? "Rhino reports it as an invalid mesh" : "its faces are not oriented consistently";
         throw new ArgumentException($"{name} is not a closed solid mesh: {why}. " +
             "Bake the kit again with BedLayout, or run ShowEdges on the piece to see the gaps.");
+    }
+
+    // A vertex lying on a neighbouring triangle's edge without being connected to it leaves a zero-area
+    // hole whose corners are all on one line, which FillHoles cannot fill. Splitting that triangle
+    // at those vertices closes it. Returns whether anything changed.
+    private static bool SplitTJunctions(Mesh mesh)
+    {
+        var topo = mesh.TopologyVertices;
+        var edges = mesh.TopologyEdges;
+        var naked = Enumerable.Range(0,edges.Count).Where(i => edges.GetConnectedFaces(i).Length == 1).ToList();
+        if (naked.Count == 0) return false;
+        // Group the naked edges into holes by shared vertices.
+        var parent = new Dictionary<int,int>();
+        int Find(int v) { while (parent.GetValueOrDefault(v,v) != v) v = parent[v]; return v; }
+        foreach (int e in naked) { var p = edges.GetTopologyVertices(e); parent[Find(p.I)] = Find(p.J); }
+        bool changed = false;
+        foreach (var hole in naked.GroupBy(e => Find(edges.GetTopologyVertices(e).I)))
+        {
+            var holeEdges = hole.ToList();
+            if (holeEdges.Sum(e => edges.EdgeLine(e).Length) > MaxHoleLength) continue;
+            var corners = holeEdges.SelectMany(e => { var p = edges.GetTopologyVertices(e); return new[]{p.I,p.J}; }).Distinct().ToList();
+            // The longest naked edge spans the hole; every other corner must lie on it.
+            int span = holeEdges.OrderByDescending(e => edges.EdgeLine(e).Length).First();
+            var line = edges.EdgeLine(span);
+            var ends = edges.GetTopologyVertices(span);
+            var inner = corners.Where(v => v != ends.I && v != ends.J)
+                .Select(v => (Vertex: v, T: line.ClosestParameter(topo[v])))
+                .ToList();
+            if (inner.Count == 0 || inner.Any(x => x.T <= 0 || x.T >= 1 ||
+                line.PointAt(x.T).DistanceTo(topo[x.Vertex]) > GapTolerance)) continue;
+            int faceIndex = edges.GetConnectedFaces(span)[0];
+            var face = mesh.Faces[faceIndex];
+            if (!face.IsTriangle) continue;
+            int a = topo.MeshVertexIndices(ends.I)[0], b = topo.MeshVertexIndices(ends.J)[0];
+            var tri = new[]{face.A,face.B,face.C}.Select(v => topo.TopologyVertexIndex(v)).ToArray();
+            int ia = Array.IndexOf(tri,ends.I), ib = Array.IndexOf(tri,ends.J);
+            if (ia < 0 || ib < 0) continue;
+            int c = new[]{face.A,face.B,face.C}[3-ia-ib];
+            // Keep the triangle's winding: walk from whichever end comes first in it.
+            bool forward = (ia+1)%3 == ib;
+            var chain = new List<int>{forward ? a : b};
+            chain.AddRange((forward ? inner.OrderBy(x => x.T) : inner.OrderByDescending(x => x.T))
+                .Select(x => topo.MeshVertexIndices(x.Vertex)[0]));
+            chain.Add(forward ? b : a);
+            mesh.Faces.SetFace(faceIndex,chain[0],chain[1],c);
+            for (int k = 1; k < chain.Count-1; k++) mesh.Faces.AddFace(chain[k],chain[k+1],c);
+            changed = true;
+        }
+        return changed;
     }
 
     private static bool IsSolid(Mesh mesh) => mesh.IsValid && mesh.IsClosed && mesh.SolidOrientation() != 0;
