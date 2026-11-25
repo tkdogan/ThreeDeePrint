@@ -426,3 +426,7 @@ FodyWeavers.xsd
 #*.lscache
 /Barn-plugin-preview
 /Barn-kit
+
+# macOS and per-user IDE state
+.DS_Store
+.idea/**/workspace.xml

@@ -80,35 +80,8 @@ Select the baked pieces and run **ToBedExportPrusa**. **Project** writes one edi
 
 ## Source and build
 
-Run [packaging/build-mac.sh](packaging/build-mac.sh) to build both plug-ins and generate the Yak distribution under `dist`. The [Go2Bed icon set](brand/go2bed-icon-set.png) uses interlocking walls for the package and Grasshopper category, and separated panels for the Flat Pack component. In Rhino, open the **Go2Bed** toolbar for Preview, Export STL and Export for Prusa. The package includes the [Rhino toolbar file](Plugin/Go2Bed.rui).
+Run `dotnet build Plugin/Go2Bed.csproj -c Release -t:Yak` to build both plug-ins and generate the Yak distribution under `dist`. It uses the `yak` tool from Rhino 8; pass `-p:YakExe=<path>` to use another one. The [Go2Bed icon set](brand/go2bed-icon-set.png) uses interlocking walls for the package and Grasshopper category, and separated panels for the Flat Pack component. In Rhino, open the **Go2Bed** toolbar for Preview, Export STL and Export for Prusa. The package includes the [Rhino toolbar file](Plugin/Go2Bed.rui).
 
 Run `dotnet build Go2Bed.sln -c Release` to build the solution. The Rhino plug-in is written to `Plugin/bin/Release/net7.0/Go2Bed.rhp` and the Mac installer to `dist/Go2Bed.macrhi`.
 
 The plug-in uses RhinoCommon mesh booleans to subtract previously allocated material with 0.05 mm clearance on each axis. Floors take precedence at intersections, followed by walls, roofs and decks, then details. RhinoCommon prepares components, scores planar orientations for bed contact and overhang, splits oversized panels with straight glue seams and packs the part silhouettes onto plates. For the barn example, select components from the simplified exterior and interior layers. The two open exterior panels are recovered from their projected render geometry. For other BIM models, select separate solid components with a supporting planar face. Explode blocks first.
-
-
----
-
-# Go2Bed Python prototype
-
-Open [the barn kit](Barn-kit/Flatpack.3dm) in Rhino 8 and run Zoom Extents. The six visible layers are print layouts in millimetres. The hidden Assembly reference layer contains the matching parts in their assembled positions. For printing, open the numbered 3MF plates directly in your slicer. Each object has the same ID in Rhino, the 3MF, the individual STL filename and the [assembly guide](Barn-kit/Assembly.md).
-
-The example uses a 1:50 scale and a 220 × 220 × 250 mm build volume. It draws from 33 elements in the simplified comparison and interior layers. The west and north walls have open source Breps. The converter accepts a closed render mesh when available and reconstructs a constant-depth through-opening profile when needed. The original detailed BIM blocks and the duplicate exterior union are excluded.
-
-## Generate another kit
-
-In Rhino 8, open [flatpack.py](flatpack.py) in ScriptEditor and run it as Python 3. Choose a saved model, a new output folder, the component layer expression, scale denominator and bed dimensions. Enter **Barn** for the supplied model. The script declares its Python dependencies for the editor to install. The same generator runs from a terminal:
-
-```sh
-python3 -m pip install 'rhino3dm>=8.35' 'manifold3d>=3.5' numpy
-python3 flatpack.py Barn_original_with_simplified_interior.3dm MyKit --scale 50 --bed 220 220 250
-python3 flatpack.py House.3dm HouseKit --layers '^(Walls|Floors|Roof)$' --scale 75 --bed 180 180 180
-```
-
-Use Python 3.9 or later with compatible package wheels. Select layers containing individual component solids. Supported inputs include closed polygonal extrusions with parallel end cuts, closed triangle or quad meshes, and Breps saved with suitable render meshes. Explode nested BIM blocks into the intended components first. A fused building mesh has no recorded wall boundaries. The script reports unsupported geometry by layer and name.
-
-## Geometry and fit
-
-The generator converts document units to model-scale millimetres. Floors take precedence at intersections, followed by walls, roofs and decks, then details. It cuts away shared volume and applies a 0.05 mm allowance along each axis of a cutter at overlapping joints. Components may separate into several pieces after these cuts. Sub-0.4 mm remnants are listed in the assembly guide.
-
-Among orientations with at least 65% of the maximum planar bed contact, it chooses the one with the least projected steep overhang, then favours larger contact and lower height. Oversized pieces get straight glue seams. Rectangular packing allows a quarter turn and reserves 3 mm around the bed and between pieces. The output uses plain glue joints and digital part IDs.

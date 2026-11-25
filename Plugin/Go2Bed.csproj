@@ -36,4 +36,21 @@
     <Copy SourceFiles="$(TargetPath);$(TargetDir)Go2Bed.rui;$(TargetDir)Go2Bed.Core.dll;$(TargetDir)Clipper2Lib.dll;$(PkgClipper2)/License.txt" DestinationFolder="$(Bundle)"/>
     <ZipDirectory SourceDirectory="$(PackageRoot)" DestinationFile="$(MSBuildProjectDirectory)/../dist/Go2Bed.macrhi" Overwrite="true"/>
   </Target>
+  <!-- Builds the Yak package: dotnet build Plugin/Go2Bed.csproj -c Release -t:Yak -->
+  <Target Name="Yak" DependsOnTargets="Build">
+    <Error Condition="'$(Configuration)' != 'Release'" Text="Build the Yak package with -c Release." />
+    <PropertyGroup>
+      <YakExe Condition="'$(YakExe)' == ''">/Applications/Rhino 8.app/Contents/Resources/bin/yak</YakExe>
+      <YakDist Condition="'$(YakDist)' == ''">$(MSBuildProjectDirectory)/../dist</YakDist>
+      <YakStage>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)yak</YakStage>
+    </PropertyGroup>
+    <RemoveDir Directories="$(YakStage)" />
+    <MakeDir Directories="$(YakStage);$(YakDist)" />
+    <Copy SourceFiles="$(TargetDir)Go2Bed.rhp;$(TargetDir)Go2Bed.rui;$(TargetDir)Go2Bed.Grasshopper.gha;$(TargetDir)Go2Bed.Core.dll;$(TargetDir)Clipper2Lib.dll;$(MSBuildProjectDirectory)/../packaging/manifest.yml" DestinationFolder="$(YakStage)" />
+    <Copy SourceFiles="$(PkgClipper2)/License.txt" DestinationFiles="$(YakStage)/Clipper2-LICENSE.txt" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/../brand/go2bed.png" DestinationFiles="$(YakStage)/icon.png" />
+    <Exec Command="&quot;$(YakExe)&quot; build --platform mac" WorkingDirectory="$(YakStage)" />
+    <ItemGroup><YakPackage Include="$(YakStage)/*.yak" /></ItemGroup>
+    <Copy SourceFiles="@(YakPackage)" DestinationFolder="$(YakDist)" />
+  </Target>
 </Project>
