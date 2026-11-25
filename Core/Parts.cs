@@ -50,14 +50,19 @@ internal static class Parts
         foreach (var cluster in Grouped(WithDisplayNames(objects.OrderBy(o => Priority(o.Name)))))
         {
             var solids = new List<Brep>();
+            var names = new List<string>();
             foreach (var (obj, name) in cluster.Members)
             {
-                try { solids.Add(Solid(obj,factor)); }
+                Brep[] shells;
+                try { shells = Shells(FuseInternalFaces(Solid(obj,factor))); }
                 catch (Exception ex) { throw new PartException($"{name} ({obj.Id}): {ex.Message}",new[] { obj.Id },ex); }
+                solids.AddRange(shells);
+                names.AddRange(shells.Length == 1 ? new[] { name } : shells.Select((_,k) => $"{name} solid {k+1}"));
             }
             var source = cluster.Members[0].Source.Id;
             var members = cluster.Members.Count == 1 ? null : cluster.Members.Select(m => m.Source.Id).ToArray();
-            foreach (var solid in solids.Count == 1 ? solids.ToArray() : Union(cluster.Name,cluster.Members.Select(m => m.Name).ToList(),members!,solids))
+            var label = cluster.Members.Count == 1 ? cluster.Name : $"Group {cluster.Name}";
+            foreach (var solid in solids.Count == 1 ? solids.ToArray() : Union(label,names,members ?? new[] { source },solids))
                 components.Add(new Component(cluster.Name,source,solid,members));
         }
         components=SolidCleanup.Cut(components);
@@ -109,7 +114,7 @@ internal static class Parts
     {
         var fused = Brep.CreateBooleanUnion(solids,Tol);
         if (fused == null || fused.Length == 0 || fused.Any(b => !b.IsValid || !b.IsSolid))
-            throw new PartException($"Group {name}: its {solids.Count} solids ({string.Join(", ",names)}) could not be unioned " +
+            throw new PartException($"{name}: its {solids.Count} solids ({string.Join(", ",names)}) could not be unioned " +
                 $"({(fused == null || fused.Length == 0 ? "no result" : $"{fused.Count(b => !b.IsValid || !b.IsSolid)} of {fused.Length} results open or invalid")}). " +
                 "Union them in Rhino and retry; BooleanUnion there shows where it fails.",ids);
         foreach (var brep in fused)
@@ -119,16 +124,186 @@ internal static class Parts
         }
         if (fused.Length > 1)
         {
-            // Name which members ended up in which piece, so the gap is easy to find.
-            var pieces = fused.Select((piece,k) =>
-            {
-                var inside = names.Where((_,m) => solids[m].Vertices.Count > 0 &&
-                    solids[m].Vertices[0].Location.DistanceTo(piece.ClosestPoint(solids[m].Vertices[0].Location)) < Tol*10).ToList();
-                return $"piece {k+1}: {(inside.Count == 0 ? "?" : string.Join(", ",inside))}";
-            });
-            RhinoApp.WriteLine($"Group {name} prints as {fused.Length} separate pieces because its solids do not all touch ({string.Join("; ",pieces)}).");
+            // Name which members ended up in which piece, so the gap is easy to find. A member lies
+            // wholly inside one piece, so the piece nearest all its vertices is the one it joined.
+            var owner = solids.Select(solid => Enumerable.Range(0,fused.Length).OrderBy(k =>
+                solid.Vertices.Sum(v => v.Location.DistanceTo(fused[k].ClosestPoint(v.Location)))).First()).ToList();
+            var pieces = fused.Select((_,k) =>
+                $"piece {k+1}: {string.Join(", ",names.Where((_,m) => owner[m] == k))}");
+            RhinoApp.WriteLine($"{name} prints as {fused.Length} separate pieces because its solids do not all touch ({string.Join("; ",pieces)}).");
         }
         return fused;
+    }
+
+    // A polysurface can be closed and still hold faces that lie back to back, such as a post cap
+    // joined against a beam's underside without a boolean. Rhino accepts it as a solid, but welded
+    // into a mesh those faces give edges with four faces, which no mesh boolean accepts.
+    // Cutting the shared area out of both faces and rejoining fuses the two sides.
+    internal static Brep FuseInternalFaces(Brep brep)
+    {
+        if (FourFaceEdges(brep) == 0) return brep;
+        var faces = Enumerable.Range(0, brep.Faces.Count).Select(i => brep.Faces[i].DuplicateFace(false)).ToList();
+        bool changed = false;
+        for (int guard = 0; guard < 4 * brep.Faces.Count; guard++)
+        {
+            bool found = false;
+            for (int i = 0; i < faces.Count && !found; i++)
+            for (int j = i + 1; j < faces.Count && !found; j++)
+            {
+                if (!Opposed(faces[i], faces[j])) continue;
+                var a = Outside(faces[i], faces[j]);
+                var b = Outside(faces[j], faces[i]);
+                if (a == null || b == null) continue;
+                faces.RemoveAt(j); faces.RemoveAt(i);
+                faces.AddRange(a); faces.AddRange(b);
+                found = changed = true;
+            }
+            if (!found) break;
+        }
+        if (!changed) return brep;
+        var joined = Brep.JoinBreps(faces, Tol);
+        if (joined == null || joined.Length != 1 || !joined[0].IsSolid) return brep;
+        var fused = joined[0];
+        // Back-to-back faces enclose nothing, so fusing must keep the volume.
+        double before = brep.GetVolume(), after = Math.Abs(fused.GetVolume());
+        if (Math.Abs(after - Math.Abs(before)) > 1e-4 * Math.Abs(before) + Tol) return brep;
+        fused.MergeCoplanarFaces(Tol, RhinoMath.ToRadians(.1));
+        if (fused.SolidOrientation == BrepSolidOrientation.Inward) fused.Flip();
+        return FourFaceEdges(fused) < FourFaceEdges(brep) ? fused : brep;
+    }
+
+    private static int FourFaceEdges(Brep brep)
+    {
+        var mesh = new Mesh();
+        foreach (var patch in Mesh.CreateFromBrep(brep, MeshingParameters.QualityRenderMesh) ?? Array.Empty<Mesh>()) mesh.Append(patch);
+        mesh.Vertices.CombineIdentical(true, true);
+        int count = 0;
+        for (int e = 0; e < mesh.TopologyEdges.Count; e++)
+            if (mesh.TopologyEdges.GetConnectedFaces(e).Length > 2) count++;
+        return count;
+    }
+
+    // A point strictly inside a single-face brep, and the face's outward normal there.
+    private static (Point3d Point, Vector3d Normal)? Sample(Brep face)
+    {
+        var mesh = Mesh.CreateFromBrep(face, MeshingParameters.QualityRenderMesh)?.FirstOrDefault();
+        if (mesh == null || mesh.Faces.Count == 0) return null;
+        mesh.Faces.ConvertQuadsToTriangles();
+        mesh.FaceNormals.ComputeFaceNormals();
+        // The largest triangle keeps the sample clear of the face's edges.
+        int best = Enumerable.Range(0, mesh.Faces.Count).OrderByDescending(f =>
+        {
+            var t = mesh.Faces[f];
+            return Vector3d.CrossProduct(mesh.Vertices[t.B] - mesh.Vertices[t.A], mesh.Vertices[t.C] - mesh.Vertices[t.A]).Length;
+        }).First();
+        var tri = mesh.Faces[best];
+        var p = (new Point3d(mesh.Vertices[tri.A]) + new Point3d(mesh.Vertices[tri.B]) + new Point3d(mesh.Vertices[tri.C])) / 3;
+        return (p, mesh.FaceNormals[best]);
+    }
+
+    private static bool Opposed(Brep a, Brep b)
+    {
+        if (!a.Faces[0].IsPlanar(Tol) || !b.Faces[0].IsPlanar(Tol)) return false;
+        if (!BoundingBox.Intersection(a.GetBoundingBox(true), b.GetBoundingBox(true)).IsValid) return false;
+        var sa = Sample(a); var sb = Sample(b);
+        if (sa == null || sb == null || sa.Value.Normal * sb.Value.Normal > -.9999) return false;
+        return Math.Abs((sb.Value.Point - sa.Value.Point) * sa.Value.Normal) < Tol * 10;
+    }
+
+    // The pieces of face outside other, or null when the two do not overlap.
+    private static List<Brep>? Outside(Brep face, Brep other)
+    {
+        var split = face.Faces[0].Split(other.DuplicateEdgeCurves(), Tol) ?? face;
+        var keep = new List<Brep>();
+        bool overlap = false;
+        foreach (var piece in split.Faces.Select(f => f.DuplicateFace(false)))
+        {
+            var sample = Sample(piece);
+            if (sample == null) continue;
+            var target = other.Faces[0];
+            if (target.ClosestPoint(sample.Value.Point, out double u, out double v) &&
+                target.PointAt(u, v).DistanceTo(sample.Value.Point) < Tol * 10 &&
+                target.IsPointOnFace(u, v) == PointFaceRelation.Interior) overlap = true;
+            else keep.Add(piece);
+        }
+        return overlap ? keep : null;
+    }
+
+    // A polysurface can be closed and still be several solids that only touch, such as posts joined
+    // to a beam without a boolean: the post caps lie on the beam's underside. Welded into one mesh,
+    // those faces give edges with four faces, which no mesh boolean accepts. This splits such an
+    // object into its closed solids so they can be unioned like the members of a group.
+    internal static Brep[] Shells(Brep brep)
+    {
+        var patches = Mesh.CreateFromBrep(brep, MeshingParameters.QualityRenderMesh);
+        if (patches == null || patches.Length != brep.Faces.Count) return new[] { brep };
+        var mesh = new Mesh();
+        var faceOf = new List<int>();
+        for (int i = 0; i < patches.Length; i++)
+        {
+            patches[i].Faces.ConvertQuadsToTriangles();
+            mesh.Append(patches[i]);
+            faceOf.AddRange(Enumerable.Repeat(i, patches[i].Faces.Count));
+        }
+        // Weld as ToMesh does; this keeps every triangle, so faceOf stays aligned.
+        mesh.Vertices.CombineIdentical(true, true);
+        if (mesh.Faces.Count != faceOf.Count) return new[] { brep };
+        mesh.FaceNormals.ComputeFaceNormals();
+        var parent = Enumerable.Range(0, brep.Faces.Count).ToArray();
+        int Find(int i) { while (parent[i] != i) i = parent[i] = parent[parent[i]]; return i; }
+        void Join(int a, int b) => parent[Find(faceOf[a])] = Find(faceOf[b]);
+        var edges = mesh.TopologyEdges;
+        var vertices = mesh.TopologyVertices;
+        bool split = false;
+        for (int e = 0; e < edges.Count; e++)
+        {
+            var faces = edges.GetConnectedFaces(e);
+            if (faces.Length == 2) { Join(faces[0], faces[1]); continue; }
+            if (faces.Length < 3) continue;
+            split = true;
+            var ends = edges.GetTopologyVertices(e);
+            Point3d u = vertices[ends.I], v = vertices[ends.J];
+            var axis = v - u; axis.Unitize();
+            // Whether a triangle runs along the edge from I to J, and the direction it leaves the edge in.
+            var forward = new bool[faces.Length];
+            var away = new Vector3d[faces.Length];
+            for (int k = 0; k < faces.Length; k++)
+            {
+                var f = mesh.Faces[faces[k]];
+                int[] t = { vertices.TopologyVertexIndex(f.A), vertices.TopologyVertexIndex(f.B), vertices.TopologyVertexIndex(f.C) };
+                int at = Array.IndexOf(t, ends.I);
+                forward[k] = t[(at + 1) % 3] == ends.J;
+                var w = vertices[t.First(x => x != ends.I && x != ends.J)] - u;
+                away[k] = w - (w * axis) * axis; away[k].Unitize();
+            }
+            // Turning from a triangle into the solid behind it, the first oppositely oriented
+            // triangle closes the same solid. A coincident face at zero turn belongs to the other side.
+            for (int k = 0; k < faces.Length; k++)
+            {
+                var inward = -(Vector3d)mesh.FaceNormals[faces[k]];
+                int best = -1; double turn = double.MaxValue;
+                for (int s = 0; s < faces.Length; s++)
+                {
+                    if (s == k || forward[s] == forward[k]) continue;
+                    double a = Math.Atan2(away[s] * inward, away[s] * away[k]);
+                    if (a < 1e-6) a += 2 * Math.PI;
+                    if (a < turn) { turn = a; best = s; }
+                }
+                if (best >= 0) Join(faces[k], faces[best]);
+            }
+        }
+        if (!split) return new[] { brep };
+        var groups = Enumerable.Range(0, brep.Faces.Count).GroupBy(Find).ToList();
+        if (groups.Count < 2) return new[] { brep };
+        var shells = new List<Brep>();
+        foreach (var group in groups)
+        {
+            var joined = Brep.JoinBreps(group.Select(i => brep.Faces[i].DuplicateFace(false)), Tol);
+            if (joined == null || joined.Length != 1 || !joined[0].IsSolid) return new[] { brep };
+            if (joined[0].SolidOrientation == BrepSolidOrientation.Inward) joined[0].Flip();
+            shells.Add(joined[0]);
+        }
+        return shells.ToArray();
     }
 
     // Objects sharing any Rhino group fuse into one part, so nested and overlapping groups
@@ -245,6 +420,12 @@ internal static class Parts
         if (regions == null || regions.Length!=1) throw new ArgumentException("Wall silhouette needs repair.");
         var direction = acrossX ? Vector3d.XAxis*box.Diagonal.X : Vector3d.YAxis*box.Diagonal.Y;
         return regions[0].Faces[0].CreateExtrusion(new LineCurve(Point3d.Origin,Point3d.Origin+direction),true);
+    }
+
+    internal static bool MeshesWatertight(Brep b)
+    {
+        try { using var mesh = ToMesh(b); return true; }
+        catch (InvalidOperationException) { return false; }
     }
 
     internal static Mesh ToMesh(Brep b)

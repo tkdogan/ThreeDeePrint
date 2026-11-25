@@ -57,8 +57,23 @@ internal static class PrintLayout
             attr.SetUserString("FlatPack.Kit",kit.ToString());
             attr.SetUserString("FlatPack.Kind",kind);
             if (source!=Guid.Empty) attr.SetUserString("FlatPack.Source",source.ToString());
+            if (geometry is Mesh mesh && !mesh.IsValid)
+            {
+                // Rhino refuses invalid meshes; drop degenerate faces and unused vertices before giving up.
+                mesh.Faces.CullDegenerateFaces();
+                mesh.Vertices.CullUnused();
+                mesh.Compact();
+            }
             var id = doc.Objects.Add(geometry,attr);
-            if (id==Guid.Empty) throw new IOException("Could not bake "+name);
+            if (id==Guid.Empty)
+            {
+                string where = kind switch { "Print" => "its plate mesh", "Reference" => "its assembly reference mesh", _ => kind.ToLowerInvariant() };
+                string why = geometry.IsValidWithLog(out string log) ? "Rhino refused it without saying why"
+                    : "Rhino reports: " + string.Join(" ",log.Split('\n',StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Take(4));
+                string size = geometry is Mesh m ? $" ({m.Faces.Count} faces, {m.Vertices.Count} vertices, closed {m.IsClosed})" : "";
+                throw new PartException($"Could not bake {name}: {where}{size} is not valid. {why}.",
+                    source==Guid.Empty ? Array.Empty<Guid>() : new[] { source });
+            }
             addedObjects.Add(id);
         }
 

@@ -48,8 +48,10 @@ internal static class SolidCleanup
                             source[i].Objects.Concat(overlapping.SelectMany(c => source[c].Objects)).Distinct().ToList());
                     var solid=Brep.CreateFromMesh(rebuilt,true);
                     var merged=solid.DuplicateBrep();
+                    // Merged faces print cleaner, but their edges can drift apart within tolerance so the
+                    // part no longer meshes watertight later. Keep the merge only if it still meshes closed.
                     if (merged.MergeCoplanarFaces(.0002,.00001) && merged.IsValid && merged.IsSolid &&
-                        Math.Abs(merged.GetVolume()-solid.GetVolume())<.001) solid=merged;
+                        Math.Abs(merged.GetVolume()-solid.GetVolume())<.001 && Parts.MeshesWatertight(merged)) solid=merged;
                     cleaned.Add(source[i] with {Solid=solid});
                 }
                 var grown=Grow(mesh,Clearance);
