@@ -84,10 +84,8 @@ Run [packaging/build-mac.sh](packaging/build-mac.sh) to build both plug-ins and 
 
 Run `dotnet build Go2Bed.sln -c Release` to build the solution. The Rhino plug-in is written to `Plugin/bin/Release/net7.0/Go2Bed.rhp` and the Mac installer to `dist/Go2Bed.macrhi`.
 
-The plug-in uses Manifold to subtract previously allocated material with 0.05 mm clearance on each axis. Floors take precedence at intersections, followed by walls, roofs and decks, then details. RhinoCommon prepares components, scores planar orientations for bed contact and overhang, splits oversized panels with straight glue seams and packs the part silhouettes onto plates. For the barn example, select components from the simplified exterior and interior layers. The two open exterior panels are recovered from their projected render geometry. For other BIM models, select separate solid components with a supporting planar face. Explode blocks first.
+The plug-in uses RhinoCommon mesh booleans to subtract previously allocated material with 0.05 mm clearance on each axis. Floors take precedence at intersections, followed by walls, roofs and decks, then details. RhinoCommon prepares components, scores planar orientations for bed contact and overhang, splits oversized panels with straight glue seams and packs the part silhouettes onto plates. For the barn example, select components from the simplified exterior and interior layers. The two open exterior panels are recovered from their projected render geometry. For other BIM models, select separate solid components with a supporting planar face. Explode blocks first.
 
-
-The project includes a universal macOS geometry library for Apple silicon and Intel. A normal Rider build copies it beside the RHP. To rebuild that library from its pinned, checksum-verified source, run [build-mac.sh](Plugin/Native/build-mac.sh) with CMake and the Xcode command-line tools installed.
 
 ---
 

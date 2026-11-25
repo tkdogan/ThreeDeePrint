@@ -27,7 +27,19 @@ internal record SourcePart(GeometryBase Geometry, string? Name, Guid Id, bool Re
 }
 
 internal record Part(string Name, Guid Source, Mesh Assembled, Mesh Flat);
-internal record Component(string Name, Guid Source, Brep Solid);
+// Members lists every Rhino object fused into the component; a single object leaves it null.
+internal record Component(string Name, Guid Source, Brep Solid, IReadOnlyList<Guid>? Members = null)
+{
+    internal IReadOnlyList<Guid> Objects => Members ?? new[] { Source };
+}
+
+// A failure that points at Rhino objects, so commands can select them for the user.
+internal sealed class PartException : InvalidOperationException
+{
+    internal PartException(string message, IReadOnlyList<Guid> objects, Exception? inner = null)
+        : base(message, inner) { Objects = objects; }
+    internal IReadOnlyList<Guid> Objects { get; }
+}
 internal static class Parts
 {
     private const double Tol = .001; // All geometry here is at print scale, in millimetres.
@@ -41,11 +53,12 @@ internal static class Parts
             foreach (var (obj, name) in cluster.Members)
             {
                 try { solids.Add(Solid(obj,factor)); }
-                catch (Exception ex) { throw new InvalidOperationException($"{name} ({obj.Id}): {ex.Message}",ex); }
+                catch (Exception ex) { throw new PartException($"{name} ({obj.Id}): {ex.Message}",new[] { obj.Id },ex); }
             }
             var source = cluster.Members[0].Source.Id;
-            foreach (var solid in solids.Count == 1 ? solids.ToArray() : Union(cluster.Name,solids))
-                components.Add(new Component(cluster.Name,source,solid));
+            var members = cluster.Members.Count == 1 ? null : cluster.Members.Select(m => m.Source.Id).ToArray();
+            foreach (var solid in solids.Count == 1 ? solids.ToArray() : Union(cluster.Name,cluster.Members.Select(m => m.Name).ToList(),members!,solids))
+                components.Add(new Component(cluster.Name,source,solid,members));
         }
         components=SolidCleanup.Cut(components);
         var jointed = fingers ? FingerJoints.Apply(components,clearance) : new HashSet<(int, int)>();
@@ -61,7 +74,8 @@ internal static class Parts
         foreach (var component in components)
         {
             try { prepared.AddRange(Flatten(component.Solid,component.Name,component.Source,width,depth,seamClearance)); }
-            catch (Exception ex) { throw new InvalidOperationException($"{component.Name}: {ex.Message}",ex); }
+            catch (PartException) { throw; }
+            catch (Exception ex) { throw new PartException($"{component.Name}: {ex.Message}",component.Objects,ex); }
         }
         return prepared;
 
@@ -91,18 +105,29 @@ internal static class Parts
 
     // Fuses a group's solids so the rest of the pipeline sees one part. Members that do not
     // touch stay separate solids and print as separate pieces.
-    private static Brep[] Union(string name, List<Brep> solids)
+    private static Brep[] Union(string name, List<string> names, Guid[] ids, List<Brep> solids)
     {
         var fused = Brep.CreateBooleanUnion(solids,Tol);
         if (fused == null || fused.Length == 0 || fused.Any(b => !b.IsValid || !b.IsSolid))
-            throw new InvalidOperationException($"Group {name}: its solids could not be unioned. Union them in Rhino and retry.");
+            throw new PartException($"Group {name}: its {solids.Count} solids ({string.Join(", ",names)}) could not be unioned " +
+                $"({(fused == null || fused.Length == 0 ? "no result" : $"{fused.Count(b => !b.IsValid || !b.IsSolid)} of {fused.Length} results open or invalid")}). " +
+                "Union them in Rhino and retry; BooleanUnion there shows where it fails.",ids);
         foreach (var brep in fused)
         {
             brep.MergeCoplanarFaces(Tol,RhinoMath.ToRadians(.1));
             if (brep.SolidOrientation == BrepSolidOrientation.Inward) brep.Flip();
         }
         if (fused.Length > 1)
-            RhinoApp.WriteLine($"Group {name} prints as {fused.Length} separate pieces because its solids do not all touch.");
+        {
+            // Name which members ended up in which piece, so the gap is easy to find.
+            var pieces = fused.Select((piece,k) =>
+            {
+                var inside = names.Where((_,m) => solids[m].Vertices.Count > 0 &&
+                    solids[m].Vertices[0].Location.DistanceTo(piece.ClosestPoint(solids[m].Vertices[0].Location)) < Tol*10).ToList();
+                return $"piece {k+1}: {(inside.Count == 0 ? "?" : string.Join(", ",inside))}";
+            });
+            RhinoApp.WriteLine($"Group {name} prints as {fused.Length} separate pieces because its solids do not all touch ({string.Join("; ",pieces)}).");
+        }
         return fused;
     }
 

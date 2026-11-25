@@ -53,7 +53,24 @@ public sealed class ToBedPreview : Command
             RhinoApp.WriteLine($"Baked {root.FullPath}. Inspect the plate layers, then run ToBedExportSTL.");
             return Result.Success;
         }
-        catch (Exception e) { RhinoApp.WriteLine("ToBedPreview: "+e.Message); return Result.Failure; }
+        catch (Exception e)
+        {
+            RhinoApp.WriteLine("ToBedPreview: "+e.Message);
+            SelectCulprits(doc,e);
+            return Result.Failure;
+        }
+    }
+
+    // Selects the objects a failure names, so the user can find them in the model.
+    internal static void SelectCulprits(RhinoDoc doc,Exception e)
+    {
+        var part=e as PartException ?? e.InnerException as PartException;
+        if (part==null) return;
+        doc.Objects.UnselectAll();
+        int found=part.Objects.Count(id => doc.Objects.Select(id,true,true));
+        if (found==0) return;
+        doc.Views.Redraw();
+        RhinoApp.WriteLine($"Selected the {(found==1 ? "object" : $"{found} objects")} involved. Run Zoom Selected to find {(found==1 ? "it" : "them")}.");
     }
 
     private static PreviewSettings? ReadSettings()

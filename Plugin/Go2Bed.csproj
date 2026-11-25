@@ -19,7 +19,6 @@
     <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
     <None Update="Go2Bed.rui" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="../brand/icons/go2bed.ico" LogicalName="Go2Bed.Icon.ico" />
-    <None Update="Native/libGo2BedSolid.dylib;Native/Manifold-LICENSE.txt;Native/Manifold-AUTHORS.txt" TargetPath="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Compile Remove="ToBedDEBUG.cs" Condition="'$(Configuration)' != 'Debug'" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
@@ -34,7 +33,7 @@
       <Bundle>$(PackageRoot)/Go2Bed.rhp</Bundle>
     </PropertyGroup>
     <MakeDir Directories="$(Bundle);$(MSBuildProjectDirectory)/../dist"/>
-    <Copy SourceFiles="$(TargetPath);$(TargetDir)Go2Bed.rui;$(TargetDir)Go2Bed.Core.dll;$(TargetDir)Clipper2Lib.dll;$(TargetDir)libGo2BedSolid.dylib;$(TargetDir)Manifold-LICENSE.txt;$(TargetDir)Manifold-AUTHORS.txt;$(PkgClipper2)/License.txt" DestinationFolder="$(Bundle)"/>
+    <Copy SourceFiles="$(TargetPath);$(TargetDir)Go2Bed.rui;$(TargetDir)Go2Bed.Core.dll;$(TargetDir)Clipper2Lib.dll;$(PkgClipper2)/License.txt" DestinationFolder="$(Bundle)"/>
     <ZipDirectory SourceDirectory="$(PackageRoot)" DestinationFile="$(MSBuildProjectDirectory)/../dist/Go2Bed.macrhi" Overwrite="true"/>
   </Target>
 </Project>
