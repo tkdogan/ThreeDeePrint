@@ -17,11 +17,12 @@ public static class Kit
     internal static Layer BakeSettings(RhinoDoc doc, RhinoObject[] objects, PreviewSettings settings, bool barn = false)
     {
         var (scale,width,depth,height,joints,useSourceColors) = settings;
-        var sources = objects.Select(o => SourcePart.FromObject(o,barn));
+        var sources = objects.SelectMany(o => SourcePart.FromObjects(o,barn)).ToList();
         var layout = PrintLayout.Solve(sources,doc.ModelUnitSystem,scale,width,depth,height,joints);
         var bounds = BoundingBox.Empty;
         foreach (var obj in objects) bounds.Union(obj.Geometry.GetBoundingBox(true));
-        return PrintLayout.Bake(doc,layout,width,depth,bounds,useSourceColors);
+        return PrintLayout.Bake(doc,layout,width,depth,bounds,useSourceColors,
+            printer: PrinterBeds.Matching(width,depth,height)?.Name);
     }
 
     public static string Export(RhinoDoc doc, Guid kitId, string parent)
@@ -41,12 +42,12 @@ public static class Kit
         Guid.TryParse(obj.Attributes.GetUserString("FlatPack.Kit"), out _);
 
     public static string ExportSelection(RhinoDoc doc, IEnumerable<RhinoObject> selection, string parent, bool groupByPlate)
-        => ExportFiles(doc,selection,parent,groupByPlate,false);
+        => ExportFiles(doc,selection,parent,groupByPlate ? ExportFormat.GroupedStl : ExportFormat.Stl);
 
-    public static string ExportPrusa(RhinoDoc doc, IEnumerable<RhinoObject> selection, string parent, bool slice = false)
-        => ExportFiles(doc,selection,parent,false,true,slice);
+    public static string ExportProjects(RhinoDoc doc, IEnumerable<RhinoObject> selection, string parent)
+        => ExportFiles(doc,selection,parent,ExportFormat.Project);
 
-    private static string ExportFiles(RhinoDoc doc, IEnumerable<RhinoObject> selection, string parent, bool groupByPlate, bool prusa, bool slice = false)
+    private static string ExportFiles(RhinoDoc doc, IEnumerable<RhinoObject> selection, string parent, ExportFormat format)
     {
         if (!Directory.Exists(parent)) throw new DirectoryNotFoundException(parent);
         var parts = selection.Where(IsPrintPart).DistinctBy(o => o.Id).ToArray();
@@ -58,7 +59,8 @@ public static class Kit
             .Where(b => !b.Layer.IsDeleted &&
                 Guid.TryParse(b.Object.Attributes.GetUserString("FlatPack.Kit"), out var kit) &&
                 kit == b.Layer.ParentLayerId)
-            .Select(b => new PrintBed(b.Layer, b.Object.Geometry.GetBoundingBox(true)))
+            .Select(b => new PrintBed(b.Layer, b.Object.Geometry.GetBoundingBox(true),
+                PrinterFor(b.Object.Attributes.GetUserString("FlatPack.Printer"), b.Object.Geometry.GetBoundingBox(true), mm)))
             .ToArray();
 
         const double correctionLimitMm = .25;
@@ -94,7 +96,7 @@ public static class Kit
         {
             var plates = placements.GroupBy(p => p.Bed).OrderBy(g => g.Key.Layer.Index).Select(group =>
             {
-                var (plate, box) = group.Key;
+                var (plate, box, printer) = group.Key;
                 string directory = multipleKits ? $"Kit-{doc.Layers.FindId(plate.ParentLayerId).Index}" : "";
                 string plateName = plate.Name.StartsWith("Plate ", StringComparison.Ordinal) &&
                     int.TryParse(plate.Name.Substring(6), out int number) && number > 0
@@ -112,7 +114,7 @@ public static class Kit
                     return new ExportPiece(p.Part.Name ?? "Part", mesh);
                 }).ToArray();
                 return new ExportPlate(Path.Combine(directory,plateName), box.Diagonal.X*mm, box.Diagonal.Y*mm,
-                    pieces, box.Min, mm);
+                    pieces, box.Min, mm, printer);
             }).ToArray();
 
             foreach (var (part, bed, _) in placements)
@@ -128,7 +130,7 @@ public static class Kit
                 layerChanges.Add((part.Id,original));
             }
 
-            var destination = PrintFiles.Write(plates,parent,groupByPlate,prusa,slice);
+            var destination = PrintFiles.Write(plates,parent,format);
             int aligned = placements.Count(p => p.Offset.Length > .001/mm);
             RhinoApp.WriteLine($"Exported {parts.Length} printable pieces on {plates.Length} plates. " +
                 $"Aligned {aligned} for export and updated {layerChanges.Count} plate assignments.");
@@ -149,7 +151,15 @@ public static class Kit
         }
     }
 
-    private sealed record PrintBed(Layer Layer, BoundingBox Bounds);
+    private sealed record PrintBed(Layer Layer, BoundingBox Bounds, string? Printer);
+
+    // Kits baked before 1.2 carry no printer name; a bed outline of a library size is taken as that printer.
+    private static string? PrinterFor(string? stored, BoundingBox outline, double mm)
+    {
+        if (PrinterBeds.Find(stored) is { } named) return named.Name;
+        var sized = PrinterBeds.All.Where(p => Math.Abs(p.Width-outline.Diagonal.X*mm) < .01 && Math.Abs(p.Depth-outline.Diagonal.Y*mm) < .01).ToArray();
+        return sized.Length == 1 ? sized[0].Name : null;
+    }
 
     private static Vector3d BedOffset(BoundingBox piece, BoundingBox bed)
     {
@@ -157,8 +167,8 @@ public static class Kit
             return Vector3d.Unset;
 
         return new Vector3d(
-            Math.Clamp(0,bed.Min.X-piece.Min.X,bed.Max.X-piece.Max.X),
-            Math.Clamp(0,bed.Min.Y-piece.Min.Y,bed.Max.Y-piece.Max.Y),
+            RhinoMath.Clamp(0,bed.Min.X-piece.Min.X,bed.Max.X-piece.Max.X),
+            RhinoMath.Clamp(0,bed.Min.Y-piece.Min.Y,bed.Max.Y-piece.Max.Y),
             bed.Min.Z-piece.Min.Z);
     }
 }

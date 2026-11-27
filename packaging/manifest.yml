@@ -2,11 +2,13 @@ name: Go2Bed
 version: 1.2.0
 authors:
   - Timur Dogan
-description: Prepare architectural models as flat-packed print kits in Rhino and Grasshopper. Review packed plates in Rhino and export STL or PrusaSlicer projects.
+description: Turn BIM and solid models into printable, buildable model kits in Rhino and Grasshopper. Checks the input, trims overlaps, adds joints and pins, packs parts onto your printer's bed and exports 3MF projects for any slicer, or STL. Rhino 7, 8 and 9 on Windows and Mac.
 url: https://github.com/tkdogan/ThreeDeePrint
 keywords:
   - architecture
   - 3d-printing
   - fabrication
   - grasshopper
+  - bim
+  - 3mf
 icon: icon.png

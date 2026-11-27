@@ -13,15 +13,17 @@ internal record PreparedKit(List<Component> Parts, BoundingBox SourceBounds, Uni
     public override string ToString() => $"Go2Bed prepared kit ({Parts.Count} parts)";
 }
 
-internal record PackedKit(PreparedKit Source, List<Placement> Layout, double Width, double Depth)
+internal record PackedKit(PreparedKit Source, List<Placement> Layout, double Width, double Depth, double Height)
 {
+    internal string? Printer => PrinterBeds.Matching(Width,Depth,Height)?.Name;
+
     public override string ToString() => $"Go2Bed packed kit ({Layout.Count} pieces)";
 
     internal IEnumerable<ExportPlate> Plates()
     {
         var numbered = Layout.Select((entry, i) => (entry, piece: new ExportPiece($"P{i+1:00} {entry.Part.Name}",entry.Placed)));
         return numbered.GroupBy(item => item.entry.Plate).Select(group =>
-            new ExportPlate($"Plate-{group.Key:00}", Width, Depth, group.Select(item => item.piece), Point3d.Origin, 1));
+            new ExportPlate($"Plate-{group.Key:00}", Width, Depth, group.Select(item => item.piece), Point3d.Origin, 1, Printer));
     }
 
     internal static void SetPreview(IGH_DataAccess da,List<Placement> layout,double width,double depth,UnitSystem units)

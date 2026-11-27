@@ -17,12 +17,34 @@ internal record SourcePart(GeometryBase Geometry, string? Name, Guid Id, bool Re
         var layer = doc.Layers[obj.Attributes.LayerIndex];
         var groups = (obj.Attributes.GetGroupList() ?? Array.Empty<int>())
             .Select(i => doc.Groups.FindIndex(i))
-            .Where(g => g != null && !g.IsDeleted)
+            .Where(g => g != null && !Compat.IsDeleted(g))
             .Select(g => new SourceGroup(g.Id, g.Name, doc.Groups.GroupMembers(g.Index)?.Length ?? 0))
             .ToArray();
         return new SourcePart(obj.Geometry, obj.Attributes.Name, obj.Id,
             barn || layer.FullPath == "COMPARE - Simplified full size::Walls", layer.Name,
             doc.ModelAbsoluteTolerance, doc.ModelAngleToleranceRadians, groups);
+    }
+
+    // Like FromObject, but a block instance gives one source per solid inside it.
+    internal static IEnumerable<SourcePart> FromObjects(RhinoObject obj, bool barn = false)
+    {
+        if (obj is not InstanceObject instance) return new[] { FromObject(obj, barn) };
+        var groups = FromObject(obj).Groups ?? Array.Empty<SourceGroup>();
+        return InputCheck.Expand(obj.Document, instance.InstanceDefinition, instance.InstanceXform, obj.Id,
+            obj.Attributes.Name, groups);
+    }
+
+    // Grasshopper geometry, with the Rhino object it references when there is one.
+    internal static IEnumerable<SourcePart> FromGeometry(RhinoDoc doc, GeometryBase geometry, RhinoObject? referenced)
+    {
+        if (geometry is InstanceReferenceGeometry block)
+        {
+            var definition = doc.InstanceDefinitions.FindId(block.ParentIdefId);
+            if (definition == null) return new[] { new SourcePart(geometry, referenced?.Attributes.Name, referenced?.Id ?? Guid.Empty) };
+            return InputCheck.Expand(doc, definition, block.Xform, referenced?.Id ?? Guid.NewGuid(),
+                referenced?.Attributes.Name, referenced == null ? Array.Empty<SourceGroup>() : FromObject(referenced).Groups ?? Array.Empty<SourceGroup>());
+        }
+        return new[] { referenced == null ? new SourcePart(geometry, null, Guid.Empty) : FromObject(referenced) with { Geometry = geometry } };
     }
 }
 
@@ -34,7 +56,7 @@ internal record Component(string Name, Guid Source, Brep Solid, IReadOnlyList<Gu
 }
 
 // A failure that points at Rhino objects, so commands can select them for the user.
-internal sealed class PartException : InvalidOperationException
+internal class PartException : InvalidOperationException
 {
     internal PartException(string message, IReadOnlyList<Guid> objects, Exception? inner = null)
         : base(message, inner) { Objects = objects; }
@@ -46,24 +68,44 @@ internal static class Parts
     internal static List<Component> Clean(IEnumerable<SourcePart> objects, double factor, JointOptions joints)
     {
         var components = new List<Component>();
+        // Read every object first and report all problems together, so the model is fixed in one pass.
+        var problems = new List<InputProblem>();
+        var clusters = new List<(string Name, List<(Brep Solid, string Name, SourcePart Source)> Solids, IReadOnlyList<Guid>? Members, string Label)>();
+        int read = 0;
         // Only original names determine trimming priority. A group trims at its highest-priority member.
         foreach (var cluster in Grouped(WithDisplayNames(objects.OrderBy(o => Priority(o.Name)))))
         {
-            var solids = new List<Brep>();
-            var names = new List<string>();
+            var solids = new List<(Brep Solid, string Name, SourcePart Source)>();
             foreach (var (obj, name) in cluster.Members)
             {
+                if (InputCheck.CarriesNoVolume(obj.Geometry)) continue;
+                read++;
                 Brep[] shells;
                 try { shells = Shells(FuseInternalFaces(Solid(obj,factor))); }
-                catch (Exception ex) { throw new PartException($"{name} ({obj.Id}): {ex.Message}",new[] { obj.Id },ex); }
-                solids.AddRange(shells);
-                names.AddRange(shells.Length == 1 ? new[] { name } : shells.Select((_,k) => $"{name} solid {k+1}"));
+                catch (Exception ex) { problems.Add(new InputProblem(name,ex.Message,obj.Id)); continue; }
+                for (int k = 0; k < shells.Length; k++)
+                {
+                    string shellName = shells.Length == 1 ? name : $"{name} solid {k+1}";
+                    if (InputCheck.TooThin(shells[k]) is { } thin) problems.Add(new InputProblem(shellName,thin,obj.Id));
+                    solids.Add((shells[k],shellName,obj));
+                }
             }
-            var source = cluster.Members[0].Source.Id;
-            var members = cluster.Members.Count == 1 ? null : cluster.Members.Select(m => m.Source.Id).ToArray();
+            if (solids.Count == 0) continue;
+            var members = cluster.Members.Count == 1 ? null : cluster.Members.Select(m => m.Source.Id).Distinct().ToArray();
+            if (members?.Length == 1) members = null;
             var label = cluster.Members.Count == 1 ? cluster.Name : $"Group {cluster.Name}";
-            foreach (var solid in solids.Count == 1 ? solids.ToArray() : Union(label,names,members ?? new[] { source },solids))
-                components.Add(new Component(cluster.Name,source,solid,members));
+            clusters.Add((cluster.Name,solids,members,label));
+        }
+        if (read == 0) throw new ArgumentException("Nothing to print: select solid polysurfaces, extrusions, closed meshes or blocks that contain them.");
+        problems.AddRange(InputCheck.Duplicates(clusters.SelectMany(c => c.Solids).Select(s => (s.Solid,s.Name,s.Source.Id)).ToList()));
+        if (problems.Count > 0) throw new InputException(problems);
+
+        foreach (var (name, solids, members, label) in clusters)
+        {
+            var source = solids[0].Source.Id;
+            var breps = solids.Select(s => s.Solid).ToList();
+            foreach (var solid in breps.Count == 1 ? breps.ToArray() : Union(label,solids.Select(s => s.Name).ToList(),members?.ToArray() ?? new[] { source },breps))
+                components.Add(new Component(name,source,solid,members));
         }
         components=SolidCleanup.Cut(components);
         var jointed = joints.Fingers ? FingerJoints.Apply(components,joints.Clearance) : new HashSet<(int, int)>();
@@ -95,11 +137,11 @@ internal static class Parts
         {
             if (!string.IsNullOrWhiteSpace(source.Name))
             {
-                yield return (source, source.Name);
+                yield return (source, source.Name!);
                 continue;
             }
 
-            string prefix = string.IsNullOrWhiteSpace(source.LayerName) ? "Part" : source.LayerName.Trim();
+            string prefix = string.IsNullOrWhiteSpace(source.LayerName) ? "Part" : source.LayerName!.Trim();
             int number = nextByLayer.GetValueOrDefault(prefix, 1);
             string name;
             do { name = $"{prefix} {number++:00}"; } while (!used.Add(name));
@@ -362,7 +404,7 @@ internal static class Parts
                 obj.AngleTolerance ?? RhinoMath.DefaultAngleTolerance, out _),
             Extrusion e => e.ToBrep(true),
             Mesh m when m.IsClosed => Brep.CreateFromMesh(m, true),
-            _ => throw new ArgumentException("Select a solid Brep, extrusion or closed mesh.")
+            _ => throw new ArgumentException(InputCheck.NotSolid(obj.Geometry, factor))
         };
         if (b == null && obj.Geometry is Brep panel &&
             obj.Name is ("Simplified - west wall" or "Simplified - north wall") &&
@@ -374,7 +416,7 @@ internal static class Parts
         {
             throw new ArgumentException("Component could not be scaled.");
         }
-        if (b == null || !b.IsValid || !b.IsSolid) throw new ArgumentException("Component must enclose a valid solid after repair.");
+        if (b == null || !b.IsValid || !b.IsSolid) throw new ArgumentException(InputCheck.NotSolid(obj.Geometry, factor));
         if (b.SolidOrientation == BrepSolidOrientation.Inward) b.Flip();
         return b;
     }

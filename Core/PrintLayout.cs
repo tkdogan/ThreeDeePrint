@@ -15,7 +15,7 @@ internal static class PrintLayout
 
     internal static List<Component> Prepare(IEnumerable<SourcePart> objects, UnitSystem units, double scale, JointOptions joints)
     {
-        if (!double.IsFinite(scale) || scale <= 0) throw new ArgumentException("Invalid scale.");
+        if (!RhinoMath.IsValidDouble(scale) || scale <= 0) throw new ArgumentException("Invalid scale.");
         joints.Validate();
         if (units is UnitSystem.None or UnitSystem.CustomUnits or UnitSystem.Unset)
             throw new ArgumentException("Set the document's physical units first.");
@@ -25,17 +25,17 @@ internal static class PrintLayout
 
     internal static List<Placement> Pack(List<Component> components, double width, double depth, double height, double seamClearance = .2)
     {
-        if (!double.IsFinite(width) || !double.IsFinite(depth) || !double.IsFinite(height) ||
+        if (!RhinoMath.IsValidDouble(width) || !RhinoMath.IsValidDouble(depth) || !RhinoMath.IsValidDouble(height) ||
             width <= 6 || depth <= 6 || height <= 0) throw new ArgumentException("Invalid build volume.");
         var parts = Parts.Orient(components,width-2*PlatePacking.Margin,depth-2*PlatePacking.Margin,
-            Math.Clamp(seamClearance,.05,.60));
+            RhinoMath.Clamp(seamClearance,.05,.60));
         var layout = PlatePacking.Pack(parts,width,depth,height);
         if (layout.Count==0) throw new ArgumentException("No printable pieces at this scale.");
         return layout;
     }
 
     internal static Layer Bake(RhinoDoc doc, List<Placement> layout, double width, double depth,
-        BoundingBox placementBounds, bool useSourceColors, List<Guid>? bakedIds = null)
+        BoundingBox placementBounds, bool useSourceColors, List<Guid>? bakedIds = null, string? printer = null)
     {
         double mm = RhinoMath.UnitScale(doc.ModelUnitSystem,UnitSystem.Millimeters);
         var addedLayers = new List<int>();
@@ -57,6 +57,8 @@ internal static class PrintLayout
             attr.SetUserString("FlatPack.Kit",kit.ToString());
             attr.SetUserString("FlatPack.Kind",kind);
             if (source!=Guid.Empty) attr.SetUserString("FlatPack.Source",source.ToString());
+            // The 3MF export picks the slicer preset from the printer the plates were packed for.
+            if (kind=="Bed" && printer!=null) attr.SetUserString("FlatPack.Printer",printer);
             if (geometry is Mesh mesh && !mesh.IsValid)
             {
                 // Rhino refuses invalid meshes; drop degenerate faces and unused vertices before giving up.
@@ -69,7 +71,7 @@ internal static class PrintLayout
             {
                 string where = kind switch { "Print" => "its plate mesh", "Reference" => "its assembly reference mesh", _ => kind.ToLowerInvariant() };
                 string why = geometry.IsValidWithLog(out string log) ? "Rhino refused it without saying why"
-                    : "Rhino reports: " + string.Join(" ",log.Split('\n',StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Take(4));
+                    : "Rhino reports: " + string.Join(" ",log.Split(new[] { '\n' },StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Take(4));
                 string size = geometry is Mesh m ? $" ({m.Faces.Count} faces, {m.Vertices.Count} vertices, closed {m.IsClosed})" : "";
                 throw new PartException($"Could not bake {name}: {where}{size} is not valid. {why}.",
                     source==Guid.Empty ? Array.Empty<Guid>() : new[] { source });

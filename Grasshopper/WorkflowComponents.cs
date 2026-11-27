@@ -52,8 +52,11 @@ public sealed class PreparePartsComponent : GH_Component
             {
                 if (item?.ScriptVariable() is not GeometryBase g) throw new ArgumentException("Supply solid geometry.");
                 var obj = item.IsReferencedGeometry ? doc.Objects.FindId(item.ReferenceID) : null;
-                sources.Add(obj == null ? new SourcePart(g,null,Guid.Empty) : SourcePart.FromObject(obj) with { Geometry = g });
-                bounds.Union(g.GetBoundingBox(true));
+                foreach (var source in SourcePart.FromGeometry(doc,g,obj))
+                {
+                    sources.Add(source);
+                    bounds.Union(source.Geometry.GetBoundingBox(true));
+                }
             }
             var joints = new JointOptions(fingers,pins,marks,clearance,pinHole);
             var parts = PrintLayout.Prepare(sources,doc.ModelUnitSystem,scale,joints);
@@ -66,7 +69,7 @@ public sealed class PreparePartsComponent : GH_Component
                 return solid;
             }));
         }
-        catch (Exception e) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,e.Message); }
+        catch (Exception e) { Go2BedInfo.Report(this,e); }
     }
 }
 
@@ -129,9 +132,9 @@ public sealed class PackBedsComponent : GH_Component
             var source = input.Value as PreparedKit ?? throw new ArgumentException("Connect the Prepared kit output from Prepare Parts.");
             var layout = PrintLayout.Pack(source.Parts,width,depth,height,source.Clearance);
             Message = PrinterBeds.Matching(width,depth,height)?.Name ?? $"{width:0} × {depth:0} × {height:0} mm";
-            da.SetData(0,new GH_ObjectWrapper(new PackedKit(source,layout,width,depth)));
+            da.SetData(0,new GH_ObjectWrapper(new PackedKit(source,layout,width,depth,height)));
         }
-        catch (Exception e) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,e.Message); }
+        catch (Exception e) { Go2BedInfo.Report(this,e); }
     }
 }
 
@@ -151,7 +154,7 @@ public sealed class PreviewPlatesComponent : GH_Component
         p.AddMeshParameter("Packed parts","P","Print meshes by plate.",GH_ParamAccess.tree);
         p.AddTextParameter("Part names","N","Matching IDs and names.",GH_ParamAccess.tree);
         p.AddCurveParameter("Bed outlines","B","Build plate outlines matching the plate branches.",GH_ParamAccess.tree);
-        p.AddGenericParameter("Reviewed kit","K","Connect to Export STL or Export for Prusa.",GH_ParamAccess.item);
+        p.AddGenericParameter("Reviewed kit","K","Connect to Export STL or Export 3MF.",GH_ParamAccess.item);
     }
     protected override void BeforeSolveInstance() => kits.Clear();
     protected override void SolveInstance(IGH_DataAccess da)
@@ -172,7 +175,7 @@ public sealed class PreviewPlatesComponent : GH_Component
         {
             if (doc.RuntimeSerialNumber != kit.Source.Document || doc.ModelUnitSystem != kit.Source.Units)
             { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,"Recompute in the destination document before baking."); return; }
-            PrintLayout.Bake(doc,kit.Layout,kit.Width,kit.Depth,kit.Source.SourceBounds,colors,ids);
+            PrintLayout.Bake(doc,kit.Layout,kit.Width,kit.Depth,kit.Source.SourceBounds,colors,ids,kit.Printer);
         }
     }
 }

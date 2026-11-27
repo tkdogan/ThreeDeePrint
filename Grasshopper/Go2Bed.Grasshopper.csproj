@@ -1,24 +1,32 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFrameworks>net48;net7.0</TargetFrameworks>
+    <LangVersion>11</LangVersion>
     <TargetExt>.gha</TargetExt>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Version>1.2.0</Version>
-    <GrasshopperVersion>8.21.25188.17001</GrasshopperVersion>
+    <GrasshopperVersion Condition="'$(TargetFramework)' == 'net48'">7.13.21348.13001</GrasshopperVersion>
+    <GrasshopperVersion Condition="'$(TargetFramework)' != 'net48'">8.21.25188.17001</GrasshopperVersion>
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Core/Go2Bed.Core.csproj" />
-    <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
+    <PackageReference Include="RhinoCommon" Version="$(GrasshopperVersion)" ExcludeAssets="runtime" />
     <!-- Use the SDK reference assemblies without importing its Windows desktop framework. -->
     <PackageDownload Include="Grasshopper" Version="[$(GrasshopperVersion)]" />
-    <Reference Include="Grasshopper" HintPath="$(NuGetPackageRoot)/grasshopper/$(GrasshopperVersion)/lib/net7.0/Grasshopper.dll" Private="false" />
-    <Reference Include="GH_IO" HintPath="$(NuGetPackageRoot)/grasshopper/$(GrasshopperVersion)/lib/net7.0/GH_IO.dll" Private="false" />
+    <Reference Include="Grasshopper" HintPath="$(NuGetPackageRoot)/grasshopper/$(GrasshopperVersion)/lib/$(TargetFramework)/Grasshopper.dll" Private="false" />
+    <Reference Include="GH_IO" HintPath="$(NuGetPackageRoot)/grasshopper/$(GrasshopperVersion)/lib/$(TargetFramework)/GH_IO.dll" Private="false" />
     <EmbeddedResource Include="../brand/icons/preview-24.png" LogicalName="Go2Bed.preview.png" />
     <EmbeddedResource Include="../brand/icons/export-stl-24.png" LogicalName="Go2Bed.export-stl.png" />
     <EmbeddedResource Include="../brand/icons/export-prusa-24.png" LogicalName="Go2Bed.export-prusa.png" />
     <EmbeddedResource Include="../brand/icons/flat-pack-24.png" LogicalName="Go2Bed.FlatPack.png" />
     <EmbeddedResource Include="../brand/go2bed-24.png" LogicalName="Go2Bed.Icon.png" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Net.Http" />
   </ItemGroup>
 </Project>

@@ -27,8 +27,8 @@ public sealed class BedLayout : Command
         try
         {
             using var picker = new GetObject();
-            picker.SetCommandPrompt("Select components to print, then press Enter");
-            picker.GeometryFilter = ObjectType.Brep | ObjectType.Extrusion | ObjectType.Mesh;
+            picker.SetCommandPrompt("Select solids or blocks to print, then press Enter");
+            picker.GeometryFilter = ObjectType.Brep | ObjectType.Extrusion | ObjectType.Mesh | ObjectType.InstanceReference;
             picker.SubObjectSelect = false;
             picker.EnablePreSelect(true, true);
             picker.GetMultiple(1, 0);
@@ -50,7 +50,7 @@ public sealed class BedLayout : Command
             }
             var root = Kit.BakeSettings(doc,inputs,settings);
             previous = settings;
-            RhinoApp.WriteLine($"Baked {root.FullPath}. Inspect the plate layers, then run BedSTL.");
+            RhinoApp.WriteLine($"Baked {root.FullPath}. Inspect the plate layers, then run Bed3MF or BedSTL.");
             return Result.Success;
         }
         catch (Exception e)
@@ -127,6 +127,14 @@ public sealed class BedSTL : Command
     protected override Result RunCommand(RhinoDoc doc, RunMode mode) => ExportCommand.Run(doc,mode,false);
 }
 
+public sealed class Bed3MF : Command
+{
+    public override string EnglishName => "Bed3MF";
+    protected override Result RunCommand(RhinoDoc doc, RunMode mode) => ExportCommand.Run(doc,mode,true);
+}
+
+// The 1.1 name of Bed3MF, kept so existing toolbars and scripts still work.
+[CommandStyle(Style.Hidden)]
 public sealed class BedPrusa : Command
 {
     public override string EnglishName => "BedPrusa";
@@ -135,7 +143,7 @@ public sealed class BedPrusa : Command
 
 internal static class ExportCommand
 {
-    internal static Result Run(RhinoDoc doc, RunMode mode, bool prusa)
+    internal static Result Run(RhinoDoc doc, RunMode mode, bool projects)
     {
         try
         {
@@ -150,8 +158,8 @@ internal static class ExportCommand
             var parts = picker.Objects().Select(r => r.Object()).Where(Kit.IsPrintPart).ToArray();
             if (parts.Length == 0) throw new ArgumentException("Select printable meshes on the baked Plate layers.");
             RhinoApp.WriteLine($"Selected {parts.Length} printable pieces.");
-            bool grouped = false, slice = false;
-            if (!prusa)
+            bool grouped = false;
+            if (!projects)
             {
                 using var format = new GetOption();
                 format.SetCommandPrompt("STL export layout");
@@ -161,16 +169,6 @@ internal static class ExportCommand
                 if (answer != GetResult.Option && answer != GetResult.Nothing) return format.CommandResult();
                 grouped = answer == GetResult.Option && format.Option().EnglishName == "GroupedPlates";
             }
-            else
-            {
-                using var output = new GetOption();
-                output.SetCommandPrompt("MK4S HF 0.4 mm nozzle, Generic PLA, 0.20 mm Structural — export");
-                output.AddOption("Project"); output.AddOption("ProjectAndBGCode");
-                output.SetDefaultString("Project"); output.AcceptNothing(true);
-                var answer = output.Get();
-                if (answer != GetResult.Option && answer != GetResult.Nothing) return output.CommandResult();
-                slice = answer == GetResult.Option && output.Option().EnglishName == "ProjectAndBGCode";
-            }
             string path = "";
             if (mode == RunMode.Scripted)
             {
@@ -178,12 +176,12 @@ internal static class ExportCommand
             }
             else
             {
-                using var dialog = new Eto.Forms.SelectFolderDialog { Title = prusa ? "Choose a folder for the PrusaSlicer projects" : "Choose a folder for the STL kit" };
+                using var dialog = new Eto.Forms.SelectFolderDialog { Title = projects ? "Choose a folder for the 3MF projects" : "Choose a folder for the STL kit" };
                 if (dialog.ShowDialog(Rhino.UI.RhinoEtoApp.MainWindow) != Eto.Forms.DialogResult.Ok) return Result.Cancel;
                 path = dialog.Directory;
             }
-            var destination = prusa ? Kit.ExportPrusa(doc, parts, path, slice) : Kit.ExportSelection(doc, parts, path, grouped);
-            RhinoApp.WriteLine("Exported to " + destination);
+            var destination = projects ? Kit.ExportProjects(doc, parts, path) : Kit.ExportSelection(doc, parts, path, grouped);
+            RhinoApp.WriteLine("Exported to " + destination + (projects ? ". Open each plate's 3MF in your slicer, check the preset and slice." : ""));
             return Result.Success;
         }
         catch (Exception e) { RhinoApp.WriteLine(e.Message); return Result.Failure; }

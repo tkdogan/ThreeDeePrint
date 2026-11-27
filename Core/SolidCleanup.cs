@@ -1,3 +1,4 @@
+using Rhino;
 using Rhino.FileIO;
 using Rhino.Geometry;
 
@@ -15,6 +16,7 @@ internal static class SolidCleanup
     internal static List<Component> Cut(List<Component> source)
     {
         var cutters = new List<(Mesh Mesh,BoundingBox Box)>();
+        var cutterBreps = new Dictionary<int,Brep?>();
         var cleaned = new List<Component>();
         try
         {
@@ -24,11 +26,12 @@ internal static class SolidCleanup
                 Check(source,i,mesh);
                 var box=mesh.GetBoundingBox(true);
                 var overlapping=Enumerable.Range(0,cutters.Count).Where(c => Overlaps(box,cutters[c].Box)).ToList();
-                var pieces=overlapping.Count==0 ? new[] { mesh.DuplicateMesh() } : Subtract(source,i,mesh,cutters,overlapping);
+                var pieces=overlapping.Count==0 ? new[] { mesh.DuplicateMesh() } : Subtract(source,i,mesh,cutters,overlapping,cutterBreps);
                 foreach (var piece in pieces)
                 using (piece)
                 {
                     piece.Faces.ConvertQuadsToTriangles();
+                    CapPlanarHoles(piece);
                     var xyz=new double[piece.Vertices.Count*3];
                     for (int v=0;v<piece.Vertices.Count;v++)
                     {
@@ -63,7 +66,11 @@ internal static class SolidCleanup
             }
             return cleaned;
         }
-        finally { foreach (var (cutter,_) in cutters) cutter.Dispose(); }
+        finally
+        {
+            foreach (var (cutter,_) in cutters) cutter.Dispose();
+            foreach (var brep in cutterBreps.Values) brep?.Dispose();
+        }
     }
 
     private static void Check(List<Component> source,int i,Mesh mesh)
@@ -77,10 +84,22 @@ internal static class SolidCleanup
             "Run Check and ShowEdges on it, or BedHeal.",source[i].Objects);
     }
 
-    private static Mesh[] Subtract(List<Component> source,int i,Mesh mesh,List<(Mesh Mesh,BoundingBox Box)> cutters,List<int> overlapping)
+    private static Mesh[] Subtract(List<Component> source,int i,Mesh mesh,List<(Mesh Mesh,BoundingBox Box)> cutters,List<int> overlapping,
+        Dictionary<int,Brep?> cutterBreps)
     {
         var all=Difference(mesh,overlapping.Select(c => cutters[c].Mesh),out string log);
-        if (all!=null) return Shells(all);
+        if (all!=null)
+        {
+            var shells=Shells(all);
+            if (shells.All(Closes)) return shells;
+            // Rhino 8's mesh boolean can leave holes in the result. Try one neighbour at a time,
+            // capping the planar hole each single cut leaves, then the slower Brep boolean.
+            var retry=(overlapping.Count>1 ? Stepwise(mesh,overlapping.Select(c => cutters[c])) : null)
+                ?? BrepDifference(source[i].Solid,overlapping,cutters,cutterBreps);
+            if (retry==null) return shells;
+            foreach (var m in shells) m.Dispose();
+            return Shells(retry);
+        }
         // Replay one cutter at a time to name the neighbour that breaks the cut.
         foreach (int c in overlapping)
         {
@@ -101,15 +120,22 @@ internal static class SolidCleanup
 
     private static Mesh[]? Difference(Mesh mesh,IEnumerable<Mesh> cutters,out string log)
     {
+#if NETFRAMEWORK
+        // Rhino 7 has no boolean options: no tolerance and no log.
+        var result=Mesh.CreateBooleanDifference(new[] { mesh },cutters);
+        log="";
+        return result;
+#else
         using var text=new TextLog();
         var options=new MeshBooleanOptions { Tolerance=Tol, TextLog=text };
         var result=Mesh.CreateBooleanDifference(new[] { mesh },cutters,options,out var status);
         log=text.ToString().Trim();
         return status==Rhino.Commands.Result.Success ? result ?? Array.Empty<Mesh>() : null;
+#endif
     }
 
     private static string Reason(string log) =>
-        string.IsNullOrWhiteSpace(log) ? "" : " (Rhino: "+string.Join(" ",log.Split('\n',StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()))+")";
+        string.IsNullOrWhiteSpace(log) ? "" : " (Rhino: "+string.Join(" ",log.Split(new[] { '\n' },StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()))+")";
 
     // Splits boolean output into printable pieces. Inward-facing shells are voids and stay with the piece around them.
     private static Mesh[] Shells(Mesh[] results)
@@ -133,6 +159,101 @@ internal static class SolidCleanup
 
     // Moves every vertex so each adjacent face plane shifts outward by the cube's support distance
     // along its normal, which matches a Minkowski sum with a cube on planar faces.
+    // The same cut with Brep booleans, using the cutters rebuilt as Breps. Null if it fails.
+    private static Mesh[]? BrepDifference(Brep part,List<int> overlapping,List<(Mesh Mesh,BoundingBox Box)> cutters,Dictionary<int,Brep?> cache)
+    {
+        var breps=new List<Brep>();
+        foreach (int c in overlapping)
+        {
+            if (!cache.TryGetValue(c,out var brep))
+            {
+                brep=Brep.CreateFromMesh(cutters[c].Mesh,true);
+                if (brep!=null)
+                {
+                    brep.MergeCoplanarFaces(Tol,RhinoMath.ToRadians(.01));
+                    if (!brep.IsValid || !brep.IsSolid) { brep.Dispose(); brep=null; }
+                }
+                cache[c]=brep;
+            }
+            if (brep==null) return null;
+            breps.Add(brep);
+        }
+        var result=Brep.CreateBooleanDifference(new[] { part },breps,Tol);
+        if (result==null) return null;
+        var meshes=new List<Mesh>();
+        foreach (var piece in result)
+        {
+            if (!piece.IsValid || !piece.IsSolid) { foreach (var m in meshes) m.Dispose(); return null; }
+            if (piece.SolidOrientation==BrepSolidOrientation.Inward) piece.Flip();
+            try { meshes.Add(Parts.ToMesh(piece)); }
+            catch (InvalidOperationException) { foreach (var m in meshes) m.Dispose(); return null; }
+        }
+        return meshes.ToArray();
+    }
+
+    private static bool Closes(Mesh piece)
+    {
+        using var probe=piece.DuplicateMesh();
+        probe.Faces.ConvertQuadsToTriangles();
+        CapPlanarHoles(probe);
+        probe.Vertices.CombineIdentical(true,true);
+        return probe.IsClosed;
+    }
+
+    // Cuts with each cutter in turn, capping planar holes after every cut. Null if any step fails or stays open.
+    private static Mesh[]? Stepwise(Mesh mesh,IEnumerable<(Mesh Mesh,BoundingBox Box)> cutters)
+    {
+        var current=new List<Mesh> { mesh.DuplicateMesh() };
+        foreach (var (cutter,box) in cutters)
+        {
+            var next=new List<Mesh>();
+            foreach (var part in current)
+            {
+                if (!Overlaps(part.GetBoundingBox(true),box)) { next.Add(part); continue; }
+                var result=Difference(part,new[] { cutter },out _);
+                part.Dispose();
+                if (result==null) { foreach (var m in next.Concat(current)) m.Dispose(); return null; }
+                foreach (var piece in result)
+                {
+                    piece.Faces.ConvertQuadsToTriangles();
+                    CapPlanarHoles(piece);
+                    piece.Vertices.CombineIdentical(true,true);
+                    piece.Compact();
+                    if (!piece.IsClosed) { foreach (var m in next.Concat(result)) m.Dispose(); return null; }
+                    next.Add(piece);
+                }
+            }
+            current=next;
+        }
+        return current.ToArray();
+    }
+
+    // Rhino 8's mesh boolean can leave out the flat face where a cutter slices clean through a part,
+    // such as the bottom of a wall standing on a slab, leaving one planar hole (Rhino 9 does not).
+    // Holes whose edges all lie in one plane are filled; anything else is left for the checks below.
+    internal static void CapPlanarHoles(Mesh piece)
+    {
+        var probe=piece.DuplicateMesh();
+        probe.Vertices.CombineIdentical(true,true);
+        if (probe.IsClosed) { probe.Dispose(); return; }
+        var holes=probe.GetNakedEdges() ?? Array.Empty<Polyline>();
+        bool planar=holes.Length>0 && holes.All(h => h.IsClosed && h.Count>=4 &&
+            Plane.FitPlaneToPoints(h,out var plane)==PlaneFitResult.Success && h.All(p => Math.Abs(plane.DistanceTo(p))<Tol));
+        if (planar && probe.FillHoles())
+        {
+            probe.Vertices.CombineIdentical(true,true);
+            probe.UnifyNormals();
+            probe.Compact();
+            if (probe.IsClosed && probe.IsValid && probe.SolidOrientation()>0)
+            {
+                piece.CopyFrom(probe);
+                probe.Dispose();
+                return;
+            }
+        }
+        probe.Dispose();
+    }
+
     private static Mesh Grow(Mesh source,double half)
     {
         var mesh=source.DuplicateMesh();

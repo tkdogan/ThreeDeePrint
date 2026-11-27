@@ -22,6 +22,14 @@ public sealed class Go2BedInfo : GH_AssemblyInfo
         using var image = new Bitmap(stream!);
         return new Bitmap(image);
     }
+
+    // Shows a failure on the component. Input problems get one message each, so each is readable.
+    internal static void Report(GH_Component component, Exception e)
+    {
+        if (e is InputException input)
+            foreach (var p in input.Problems) component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error,$"{p.Name}: {p.Reason}");
+        else component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error,e.Message);
+    }
 }
 
 public sealed class Go2BedPriority : GH_AssemblyPriority
@@ -98,14 +106,17 @@ public sealed class FlatPackComponent : GH_Component
             {
                 if (item?.ScriptVariable() is not GeometryBase g) throw new ArgumentException("Supply solid geometry.");
                 var obj = item.IsReferencedGeometry ? doc.Objects.FindId(item.ReferenceID) : null;
-                sources.Add(obj == null ? new SourcePart(g,null,Guid.Empty) : SourcePart.FromObject(obj) with { Geometry=g });
-                sourceBounds.Union(g.GetBoundingBox(true));
+                foreach (var source in SourcePart.FromGeometry(doc,g,obj))
+                {
+                    sources.Add(source);
+                    sourceBounds.Union(source.Geometry.GetBoundingBox(true));
+                }
             }
             var layout = PrintLayout.Solve(sources,units,scale,width,depth,height,JointOptions.Defaults with { Fingers = fingers, Clearance = clearance });
             PackedKit.SetPreview(da,layout,width,depth,units);
             solved = layout;
         }
-        catch (Exception e) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,e.Message); }
+        catch (Exception e) { Go2BedInfo.Report(this,e); }
     }
     public override bool IsBakeCapable => solved != null;
     public override void BakeGeometry(RhinoDoc doc, List<Guid> ids) => BakeGeometry(doc,null,ids);

@@ -5,7 +5,10 @@ namespace Go2Bed;
 
 internal record ExportPiece(string Name, Mesh Mesh);
 internal record ExportPlate(string RelativeName, double Width, double Depth, IEnumerable<ExportPiece> Pieces,
-    Point3d Origin, double MillimetersPerUnit);
+    Point3d Origin, double MillimetersPerUnit, string? Printer = null);
+
+// Stl: one STL per piece. GroupedStl: one STL per plate. Project: one 3MF slicer project per plate.
+internal enum ExportFormat { Stl, GroupedStl, Project }
 
 internal static class PrintFiles
 {
@@ -92,8 +95,9 @@ internal static class PrintFiles
 
     private static bool IsSolid(Mesh mesh) => mesh.IsValid && mesh.IsClosed && mesh.SolidOrientation() != 0;
 
-    internal static string Write(IEnumerable<ExportPlate> plates,string parent,bool groupByPlate,bool prusa,bool slice)
+    internal static string Write(IEnumerable<ExportPlate> plates,string parent,ExportFormat format)
     {
+        bool groupByPlate = format == ExportFormat.GroupedStl, projects = format == ExportFormat.Project;
         if (!Directory.Exists(parent)) throw new DirectoryNotFoundException(parent);
         string staging = Path.Combine(parent, ".flatpack-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
@@ -105,8 +109,8 @@ internal static class PrintFiles
                 string folder = Path.Combine(staging,plate.RelativeName);
                 Directory.CreateDirectory(Path.GetDirectoryName(folder)!);
                 using var grouped = groupByPlate ? new Mesh() : null;
-                var project = prusa ? new PrusaProject() : null;
-                if (!groupByPlate && !prusa) Directory.CreateDirectory(folder);
+                var project = projects ? new SlicerProject(Path.GetFileName(plate.RelativeName),plate.Printer) : null;
+                if (!groupByPlate && !projects) Directory.CreateDirectory(folder);
                 foreach (var obj in plate.Pieces)
                 {
                     var mesh = obj.Mesh.DuplicateMesh();
@@ -135,13 +139,11 @@ internal static class PrintFiles
                 }
                 if (project != null)
                 {
-                    string projectPath = folder+".3mf";
-                    project.Write(projectPath);
-                    if (slice) PrusaProject.Slice(projectPath);
+                    project.Write(folder+".3mf");
                 }
                 if (grouped != null) WriteStl(folder+".stl",grouped);
             }
-            string baseName = prusa ? "FlatPack-Prusa" : "FlatPack-STL";
+            string baseName = projects ? "FlatPack-3MF" : "FlatPack-STL";
             string dest = Path.Combine(parent,baseName);
             for (int i=2;Directory.Exists(dest)||File.Exists(dest);i++) dest=Path.Combine(parent,$"{baseName}-{i}");
             Directory.Move(staging,dest);

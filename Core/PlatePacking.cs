@@ -43,7 +43,7 @@ internal static class PlatePacking
             var crossings = new List<double>();
             foreach (var ring in rings)
             {
-                var a = ring[^1];
+                var a = ring[ring.Count - 1];
                 foreach (var b in ring)
                 {
                     if ((a.Y > y) != (b.Y > y))

@@ -22,7 +22,7 @@
       </tool_bar_item>
       <tool_bar_item guid="bda2b169-f256-5770-8f5e-314056aa2792">
         <text>
-          <locale_1033>Export for Prusa</locale_1033>
+          <locale_1033>Export 3MF projects</locale_1033>
         </text>
         <left_macro_id>c30c16f9-f535-5231-a44f-a7ff6bc10e44</left_macro_id>
       </tool_bar_item>
@@ -43,9 +43,9 @@
     </macro_item>
     <macro_item guid="c30c16f9-f535-5231-a44f-a7ff6bc10e44" bitmap_id="7d069801-224f-5160-a2c2-f2df6419b87e">
       <text>
-        <locale_1033>Export for Prusa</locale_1033>
+        <locale_1033>Export 3MF projects</locale_1033>
       </text>
-      <script>! _BedPrusa</script>
+      <script>! _Bed3MF</script>
     </macro_item>
   </macros>
   <bitmaps>

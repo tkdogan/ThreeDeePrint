@@ -113,7 +113,7 @@ internal static class FingerJoints
             double length = box.Diagonal.X, width = box.Diagonal.Y;
             double halfWidth = Math.Min(width/2-.25,1.6);
             if (length<12 || 2*halfWidth+Tolerance<MinimumFingerThickness || width>length/3 || width>12) continue;
-            int n = Math.Clamp((int)Math.Floor(length/20),2,8);
+            int n = RhinoMath.Clamp((int)Math.Floor(length/20),2,8);
             for (int i=0;i<n;i++)
             {
                 var center = frame.PointAt(box.Min.X+length*(i+.5)/n,box.Center.Y);

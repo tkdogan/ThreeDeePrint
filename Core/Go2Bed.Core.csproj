@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <!-- net48 loads in Rhino 7 (Windows and Mac) and Rhino 8 on Windows in .NET Framework mode;
+         net7.0 loads in Rhino 8 and 9. -->
+    <TargetFrameworks>net48;net7.0</TargetFrameworks>
+    <LangVersion>11</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <NuGetAudit>false</NuGetAudit>
@@ -10,6 +13,14 @@
     <InternalsVisibleTo Include="Go2Bed" />
     <InternalsVisibleTo Include="Go2Bed.Grasshopper" />
     <PackageReference Include="Clipper2" Version="2.0.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="RhinoCommon" Version="7.13.21348.13001" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
     <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
   </ItemGroup>
 </Project>

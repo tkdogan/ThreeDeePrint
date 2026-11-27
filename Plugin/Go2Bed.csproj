@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <!-- net48 for Rhino 7 and Rhino 8 on Windows in .NET Framework mode; net7.0 for Rhino 8 and 9. -->
+    <TargetFrameworks>net48;net7.0</TargetFrameworks>
+    <LangVersion>11</LangVersion>
     <TargetExt>.rhp</TargetExt>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -16,41 +18,54 @@
     <ProjectReference Include="../Grasshopper/Go2Bed.Grasshopper.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../Core/Go2Bed.Core.csproj" />
     <PackageReference Include="Clipper2" Version="2.0.0" GeneratePathProperty="true" />
-    <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
     <None Update="Go2Bed.rui" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="../brand/icons/go2bed.ico" LogicalName="Go2Bed.Icon.ico" />
     <Compile Remove="BedTest.cs" Condition="'$(Configuration)' != 'Debug'" />
   </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="RhinoCommon" Version="7.13.21348.13001" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+    <PackageReference Include="RhinoCommon" Version="8.21.25188.17001" ExcludeAssets="runtime" />
+  </ItemGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
     <None Include="../Barn_original_with_simplified_interior.3dm" Link="Barn_original_with_simplified_interior.3dm" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-  <Target Name="CopyGrasshopperForRider" AfterTargets="Build">
+  <Target Name="CopyGrasshopperForRider" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
     <Copy SourceFiles="../Grasshopper/bin/$(Configuration)/$(TargetFramework)/Go2Bed.Grasshopper.gha" DestinationFolder="$(TargetDir)" />
   </Target>
-  <Target Name="PackageMac" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
-    <PropertyGroup>
-      <PackageRoot>$(IntermediateOutputPath)go2bed-mac-package</PackageRoot>
-      <Bundle>$(PackageRoot)/Go2Bed.rhp</Bundle>
-    </PropertyGroup>
-    <MakeDir Directories="$(Bundle);$(MSBuildProjectDirectory)/../dist"/>
-    <Copy SourceFiles="$(TargetPath);$(TargetDir)Go2Bed.rui;$(TargetDir)Go2Bed.Core.dll;$(TargetDir)Clipper2Lib.dll;$(PkgClipper2)/License.txt" DestinationFolder="$(Bundle)"/>
-    <ZipDirectory SourceDirectory="$(PackageRoot)" DestinationFile="$(MSBuildProjectDirectory)/../dist/Go2Bed.macrhi" Overwrite="true"/>
-  </Target>
-  <!-- Builds the Yak package: dotnet build Plugin/Go2Bed.csproj -c Release -t:Yak -->
-  <Target Name="Yak" DependsOnTargets="Build">
+  <!-- Builds one Yak package for Rhino 7, 8 and 9 on Windows and Mac:
+       dotnet build Plugin/Go2Bed.csproj -c Release -t:Yak
+       Rhino 8 and 9 load the net7.0 folder, Rhino 7 the net48 folder. -->
+  <Target Name="Yak" Condition="'$(TargetFramework)' == ''" DependsOnTargets="Build">
     <Error Condition="'$(Configuration)' != 'Release'" Text="Build the Yak package with -c Release." />
     <PropertyGroup>
+      <YakExe Condition="'$(YakExe)' == '' And '$(OS)' == 'Windows_NT'">C:\Program Files\Rhino 8\System\Yak.exe</YakExe>
       <YakExe Condition="'$(YakExe)' == ''">/Applications/Rhino 8.app/Contents/Resources/bin/yak</YakExe>
       <YakDist Condition="'$(YakDist)' == ''">$(MSBuildProjectDirectory)/../dist</YakDist>
-      <YakStage>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)yak</YakStage>
+      <YakStage>$(MSBuildProjectDirectory)/obj/$(Configuration)/yak</YakStage>
+      <Out>$(MSBuildProjectDirectory)/bin/$(Configuration)</Out>
     </PropertyGroup>
+    <!-- Two distributions of one version: Rhino 7 gets the net48 build at the package root;
+         Rhino 8 and 9 get both builds and pick their framework's folder. -->
     <RemoveDir Directories="$(YakStage)" />
-    <MakeDir Directories="$(YakStage);$(YakDist)" />
-    <Copy SourceFiles="$(TargetDir)Go2Bed.rhp;$(TargetDir)Go2Bed.rui;$(TargetDir)Go2Bed.Grasshopper.gha;$(TargetDir)Go2Bed.Core.dll;$(TargetDir)Clipper2Lib.dll;$(MSBuildProjectDirectory)/../packaging/manifest.yml" DestinationFolder="$(YakStage)" />
-    <Copy SourceFiles="$(PkgClipper2)/License.txt" DestinationFiles="$(YakStage)/Clipper2-LICENSE.txt" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)/../brand/go2bed.png" DestinationFiles="$(YakStage)/icon.png" />
-    <Exec Command="&quot;$(YakExe)&quot; build --platform mac" WorkingDirectory="$(YakStage)" />
-    <ItemGroup><YakPackage Include="$(YakStage)/*.yak" /></ItemGroup>
+    <MakeDir Directories="$(YakStage)/rh7;$(YakStage)/rh8;$(YakDist)" />
+    <ItemGroup>
+      <YakFile Include="$(Out)/net48/Go2Bed.rhp;$(Out)/net48/Go2Bed.rui;$(Out)/net48/Go2Bed.Grasshopper.gha;$(Out)/net48/Go2Bed.Core.dll;$(Out)/net48/Clipper2Lib.dll" Framework="net48" />
+      <YakFile Include="$(Out)/net7.0/Go2Bed.rhp;$(Out)/net7.0/Go2Bed.rui;$(Out)/net7.0/Go2Bed.Grasshopper.gha;$(Out)/net7.0/Go2Bed.Core.dll;$(Out)/net7.0/Clipper2Lib.dll" Framework="net7.0" />
+      <YakShared Include="$(MSBuildProjectDirectory)/../packaging/manifest.yml" Name="manifest.yml" />
+      <YakShared Include="$(NuGetPackageRoot)clipper2/2.0.0/License.txt" Name="Clipper2-LICENSE.txt" />
+      <YakShared Include="$(MSBuildProjectDirectory)/../brand/go2bed.png" Name="icon.png" />
+    </ItemGroup>
+    <Copy SourceFiles="@(YakFile)" Condition="'%(Framework)' == 'net48'" DestinationFolder="$(YakStage)/rh7" />
+    <Copy SourceFiles="@(YakFile)" DestinationFolder="$(YakStage)/rh8/%(Framework)" />
+    <Copy SourceFiles="@(YakShared)" DestinationFiles="@(YakShared->'$(YakStage)/rh7/%(Name)')" />
+    <Copy SourceFiles="@(YakShared)" DestinationFiles="@(YakShared->'$(YakStage)/rh8/%(Name)')" />
+    <Exec Command="&quot;$(YakExe)&quot; build --platform any" WorkingDirectory="$(YakStage)/rh7" />
+    <Exec Command="&quot;$(YakExe)&quot; build --platform any" WorkingDirectory="$(YakStage)/rh8" />
+    <ItemGroup><YakPackage Include="$(YakStage)/rh7/*.yak;$(YakStage)/rh8/*.yak" /></ItemGroup>
     <Copy SourceFiles="@(YakPackage)" DestinationFolder="$(YakDist)" />
   </Target>
 </Project>

@@ -1,7 +1,6 @@
 #!/bin/bash
-# Builds the Mac installers into dist/:
-#   Go2Bed.macrhi              (drag-and-drop installer, from the Release build)
-#   go2bed-<version>-*-mac.yak (Package Manager package)
+# Builds the Package Manager package into dist/: go2bed-<version>-rh7_13-any.yak.
+# One package serves Rhino 7, 8 and 9 on Windows and Mac.
 # Extra arguments go to dotnet build, e.g. -p:YakExe=/path/to/yak
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
