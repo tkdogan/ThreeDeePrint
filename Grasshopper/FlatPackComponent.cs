@@ -101,7 +101,7 @@ public sealed class FlatPackComponent : GH_Component
                 sources.Add(obj == null ? new SourcePart(g,null,Guid.Empty) : SourcePart.FromObject(obj) with { Geometry=g });
                 sourceBounds.Union(g.GetBoundingBox(true));
             }
-            var layout = PrintLayout.Solve(sources,units,scale,width,depth,height,fingers,clearance);
+            var layout = PrintLayout.Solve(sources,units,scale,width,depth,height,JointOptions.Defaults with { Fingers = fingers, Clearance = clearance });
             PackedKit.SetPreview(da,layout,width,depth,units);
             solved = layout;
         }

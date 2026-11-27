@@ -9,16 +9,16 @@ namespace Go2Bed;
 public static class Kit
 {
     public static Layer Bake(RhinoDoc doc, RhinoObject[] objects, double scale, double width, double depth, double height, bool barn)
-        => BakeWithJoints(doc, objects, scale, width, depth, height, barn, PreviewSettings.Defaults.Fingers);
+        => BakeWithJoints(doc, objects, scale, width, depth, height, barn, JointOptions.Defaults.Fingers);
 
     public static Layer BakeWithJoints(RhinoDoc doc, RhinoObject[] objects, double scale, double width, double depth, double height, bool barn, bool fingers)
-        => BakeSettings(doc,objects,new PreviewSettings(scale,width,depth,height,fingers,.20),barn);
+        => BakeSettings(doc,objects,new PreviewSettings(scale,width,depth,height,JointOptions.Defaults with { Fingers = fingers }),barn);
 
     internal static Layer BakeSettings(RhinoDoc doc, RhinoObject[] objects, PreviewSettings settings, bool barn = false)
     {
-        var (scale,width,depth,height,fingers,clearance,useSourceColors,pins) = settings;
+        var (scale,width,depth,height,joints,useSourceColors) = settings;
         var sources = objects.Select(o => SourcePart.FromObject(o,barn));
-        var layout = PrintLayout.Solve(sources,doc.ModelUnitSystem,scale,width,depth,height,fingers,clearance,pins);
+        var layout = PrintLayout.Solve(sources,doc.ModelUnitSystem,scale,width,depth,height,joints);
         var bounds = BoundingBox.Empty;
         foreach (var obj in objects) bounds.Union(obj.Geometry.GetBoundingBox(true));
         return PrintLayout.Bake(doc,layout,width,depth,bounds,useSourceColors);

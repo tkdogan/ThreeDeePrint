@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <Title>Go2Bed</Title>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <AssemblyTitle>Go2Bed</AssemblyTitle>
     <Product>Go2Bed</Product>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>

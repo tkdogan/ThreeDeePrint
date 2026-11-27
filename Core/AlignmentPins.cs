@@ -19,12 +19,9 @@ internal static class AlignmentPins
 
     private record Site(Plane PlaneA, Plane PlaneB, Point3d CenterA, Point3d CenterB, double DepthA, double DepthB);
 
-    // Hole diameter is 2.0 mm at the default 0.20 mm clearance.
-    internal static double Radius(double clearance) => Filament / 2 + clearance / 2 + .025;
-
-    internal static HashSet<(int, int)> Apply(List<Component> components, double clearance, ISet<(int, int)> skip)
+    internal static HashSet<(int, int)> Apply(List<Component> components, double holeDiameter, ISet<(int, int)> skip)
     {
-        double radius = Radius(clearance);
+        double radius = holeDiameter / 2;
         var pinned = new HashSet<(int, int)>();
         int holes = 0;
         var bounds = components.Select(component => component.Solid.GetBoundingBox(true)).ToArray();
@@ -52,7 +49,7 @@ internal static class AlignmentPins
             }
         }
         RhinoApp.WriteLine($"Added {holes} filament pin positions across {pinned.Count} contacts " +
-            $"({2 * radius:F2} mm holes for 1.75 mm filament).");
+            $"({2 * radius:F2} mm holes for {Filament} mm filament).");
         return pinned;
     }
 

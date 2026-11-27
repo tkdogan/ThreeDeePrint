@@ -11,8 +11,8 @@ public abstract class ExportKitComponent : GH_Component
     private bool buttonDown;
     private string? lastDirectory;
 
-    protected ExportKitComponent(bool prusa) : base(prusa ? "Export Prusa" : "Export STL",
-        prusa ? "Prusa" : "STL",prusa ? "Write a PrusaSlicer project for each plate." : "Write individual part STLs or grouped plate STLs.",
+    protected ExportKitComponent(bool prusa) : base(prusa ? "Export for Prusa" : "Export STL",
+        prusa ? "Prusa" : "STL",prusa ? "Write a PrusaSlicer project for each plate, using the Prusa MK4S preset." : "Write one STL per part, or one per plate.",
         "Go2Bed","Print") => this.prusa = prusa;
 
     protected override Bitmap Icon => Go2BedInfo.LoadIcon(prusa ? "Go2Bed.export-prusa.png" : "Go2Bed.export-stl.png");
@@ -20,7 +20,7 @@ public abstract class ExportKitComponent : GH_Component
     {
         // GH_Component registers its parameters during base construction.
         bool isPrusa = this is ExportPrusaComponent;
-        p.AddGenericParameter("Kit","K","One packed or reviewed kit.",GH_ParamAccess.item);
+        p.AddGenericParameter("Reviewed kit","K","Reviewed kit from Preview Plates.",GH_ParamAccess.item);
         p.AddTextParameter("Folder","F","Existing parent directory for export.",GH_ParamAccess.item);
         p.AddBooleanParameter(isPrusa ? "Slice" : "Grouped plates",isPrusa ? "S" : "G",
             isPrusa ? "Also generate BGCode using the installed PrusaSlicer." : "Write one STL per plate instead of one per part.",
@@ -38,7 +38,7 @@ public abstract class ExportKitComponent : GH_Component
         if (da.Iteration > 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,"Supply one kit and one destination per exporter."); return; }
         bool pressed = write && !buttonDown;
         buttonDown = write;
-        if (input.Value is not PackedKit kit) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,"Connect a kit from Preview or Flat Pack."); return; }
+        if (input.Value is not PackedKit kit) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error,"Connect the Reviewed kit output from Preview Plates."); return; }
         if (pressed)
         {
             try { lastDirectory = PrintFiles.Write(kit.Plates(),folder,!prusa && option,prusa,prusa && option); }

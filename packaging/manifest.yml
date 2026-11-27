@@ -1,5 +1,5 @@
 name: Go2Bed
-version: 1.1.0
+version: 1.2.0
 authors:
   - Timur Dogan
 description: Prepare architectural models as flat-packed print kits in Rhino and Grasshopper. Review packed plates in Rhino and export STL or PrusaSlicer projects.

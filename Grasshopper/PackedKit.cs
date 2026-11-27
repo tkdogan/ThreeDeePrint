@@ -7,7 +7,8 @@ using Go2Bed;
 
 namespace Go2Bed.Grasshopper;
 
-internal record PreparedKit(List<Component> Parts, BoundingBox SourceBounds, UnitSystem Units, uint Document)
+internal record PreparedKit(List<Component> Parts, BoundingBox SourceBounds, UnitSystem Units, uint Document,
+    double Clearance = JointOptions.DefaultClearance)
 {
     public override string ToString() => $"Go2Bed prepared kit ({Parts.Count} parts)";
 }

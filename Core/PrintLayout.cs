@@ -8,19 +8,19 @@ namespace Go2Bed;
 internal static class PrintLayout
 {
     internal static List<Placement> Solve(IEnumerable<SourcePart> objects, UnitSystem units, double scale,
-        double width, double depth, double height, bool fingers, double clearance, bool pins = true)
+        double width, double depth, double height, JointOptions joints)
     {
-        return Pack(Prepare(objects,units,scale,fingers,clearance,pins),width,depth,height,clearance);
+        return Pack(Prepare(objects,units,scale,joints),width,depth,height,joints.Clearance);
     }
 
-    internal static List<Component> Prepare(IEnumerable<SourcePart> objects, UnitSystem units, double scale, bool fingers, double clearance, bool pins = true)
+    internal static List<Component> Prepare(IEnumerable<SourcePart> objects, UnitSystem units, double scale, JointOptions joints)
     {
         if (!double.IsFinite(scale) || scale <= 0) throw new ArgumentException("Invalid scale.");
-        if ((fingers || pins) && !(clearance >= .05 && clearance <= .60)) throw new ArgumentException("Joint clearance must be 0.05 to 0.60 mm.");
+        joints.Validate();
         if (units is UnitSystem.None or UnitSystem.CustomUnits or UnitSystem.Unset)
             throw new ArgumentException("Set the document's physical units first.");
         var mm = RhinoMath.UnitScale(units,UnitSystem.Millimeters);
-        return Parts.Clean(objects,mm/scale,fingers,clearance,pins);
+        return Parts.Clean(objects,mm/scale,joints);
     }
 
     internal static List<Placement> Pack(List<Component> components, double width, double depth, double height, double seamClearance = .2)

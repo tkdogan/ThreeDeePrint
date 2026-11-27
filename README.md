@@ -1,12 +1,12 @@
 # Go2Bed for Rhino and Grasshopper
 
-Turn separate architectural solids into flat-packed print kits. Preview each Prusa MK4S plate in Rhino, then export selected parts or complete plates.
+Turn separate architectural solids into flat-packed print kits. Choose your printer from the built-in bed library, preview each plate in Rhino, then export selected parts or complete plates.
 
 ## Rhino commands
 
 | Command | What it does | Availability |
 | --- | --- | --- |
-| `BedLayout` | Heals Brep copies, then scales and packs the selected components onto print beds. Bakes numbered plate meshes and an assembly reference into the Rhino document. Settings include scale, build volume, optional finger joints, and source colors. | All builds |
+| `BedLayout` | Heals Brep copies, then scales and packs the selected components onto print beds. Bakes numbered plate meshes and an assembly reference into the Rhino document. Settings include scale, printer or build volume, finger joints, filament pins and their hole diameter, assembly marks, and source colors. | All builds |
 | `BedHeal` | Repairs selected Breps, joins matching naked edges, caps planar openings, and merges coplanar faces. Replaces document geometry when the result is a valid solid. | All builds |
 | `BedSTL` | Exports selected baked print meshes as one STL per piece (`Parts`) or one STL per plate (`GroupedPlates`), using the reviewed positions on the plate. | All builds |
 | `BedPrusa` | Writes an editable PrusaSlicer 3MF project for each selected plate using the MK4S preset. `ProjectAndBGCode` also runs the installed PrusaSlicer to generate binary G-code. | All builds |
@@ -18,22 +18,23 @@ Open [Go2Bed.sln](Go2Bed.sln) in Rider, choose **Debug** and the **Rhino 8 — G
 
 ## Install a packaged build
 
-The [Go2Bed 1.1.0 Yak package](dist/go2bed-1.1.0-rh8_21-mac.yak) includes the Rhino commands and five Grasshopper components for Rhino 8.21 or later on macOS. From this repository, install it locally and restart Rhino.
+The Go2Bed 1.2.0 Yak package (`dist/go2bed-1.2.0-rh8_21-mac.yak`, written by `packaging/build-mac.sh`) includes the Rhino commands and six Grasshopper components for Rhino 8.21 or later on macOS. From this repository, install it locally and restart Rhino.
 
 ```sh
-"/Applications/Rhino 8.app/Contents/Resources/bin/yak" install "$PWD/dist/go2bed-1.1.0-rh8_21-mac.yak"
+"/Applications/Rhino 8.app/Contents/Resources/bin/yak" install "$PWD/dist/go2bed-1.2.0-rh8_21-mac.yak"
 ```
 
 To browse it in Rhino’s **PackageManager**, append the absolute path of this repository’s `dist` folder to the semicolon-separated **Rhino.Options.PackageManager.Sources** setting under Advanced preferences, then search for **Go2Bed**. The release is distributed locally. [McNeel’s package source guide](https://developer.rhino3d.com/guides/yak/package-sources/)
 
 ### Grasshopper
 
-Use the five components under **Go2Bed → Print**.
+Use the six components under **Go2Bed → Print**. [examples/Go2Bed-Example.ghx](examples/Go2Bed-Example.ghx) wires them all together with a slider, toggle or list for every setting. Open it, right-click **Model solids** and choose **Set Multiple Geometries**.
 
-1. **Prepare Parts** accepts model geometry and scale. It trims overlaps, applies optional finger joints, and outputs a prepared kit plus the solids for inspection.
-2. Connect **Prepared kit** to **Flat Pack**. Adjust the build volume here to orient, split and pack the pieces. The default bed is the Prusa MK4S.
-3. Connect **Packed kit** to **Preview**. Meshes, names and outlines are grouped by plate. Right-click Preview and choose **Bake** for a numbered Rhino kit with editable plate layers.
-4. Connect **Reviewed kit** to **Export STL**, **Export Prusa**, or both. Set an existing destination folder and connect a Grasshopper **Button** to each **Write** input. STL supports individual pieces or grouped plates. Prusa writes one 3MF project per plate, with optional BGCode slicing. Each exporter returns its last output folder.
+1. **Prepare Parts** accepts model geometry and scale. It trims overlaps and cuts the joints you switch on: **Finger joints**, **Filament pins** with their **Pin hole diameter**, and **Assembly marks**. **Joint clearance** applies to fingers and to the seam keys of split parts. It outputs a prepared kit plus the solids for inspection.
+2. **Printer Bed** turns a printer name into **Bed width**, **Bed depth** and **Build height**. Connect a Value List of the names in its **Printers** output, or type a name.
+3. Connect **Prepared kit** and the bed size to **Flat Pack** to orient, split and pack the pieces. The default bed is the Prusa MK4S.
+4. Connect **Packed kit** to **Preview Plates**. Meshes, names and outlines are grouped by plate. Right-click Preview Plates and choose **Bake** for a numbered Rhino kit with editable plate layers.
+5. Connect **Reviewed kit** to **Export STL**, **Export for Prusa**, or both. Set an existing destination folder and connect a Grasshopper **Button** to each **Write** input. STL supports individual pieces or grouped plates. Prusa writes one 3MF project per plate, with optional BGCode slicing. Each exporter returns its last output folder.
 
 Grasshopper exports use the wired layout directly. To export manual edits to baked Rhino meshes, use the Rhino selection-based export commands. Existing definitions with the original all-in-one Flat Pack component continue to use their saved wiring.
 
@@ -44,7 +45,7 @@ Grasshopper exports use the wired layout directly. To export manual edits to bak
 ## Bake and review
 
 1. Select the wall, slab, or other component objects and run **BedLayout** to open the settings dialog. If you start the command without a component selection, select the objects at the prompt and press **Enter**.
-2. Set the scale denominator and build volume. **Add wall-to-slab fingers** and **Add filament pin holes** are enabled by default. Adjust the **clearance per side** in millimetres or uncheck either box. Click **Bake preview**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints. Each part lies on its largest flat face. If slivers or small modelling steps sit up to 0.5 mm below that face, they are trimmed off, as long as the trim removes at most 2% of the part and gives it at least 10% more bed contact.
+2. Set the scale denominator and choose a **Printer**, or type the bed width, bed depth and build height. **Finger joints**, **Filament pins** and **Assembly marks** are on by default; uncheck any of them. Adjust the **Pin hole diameter** and the **Joint clearance per side** in millimetres. Click **Bake plates**. Defaults are 1:50 and the Prusa MK4S build volume of 250 × 210 × 220 mm. The packer uses projected part outlines, quarter turns, 3 mm bed margins and at least 2 mm between footprints. Each part lies on its largest flat face. If slivers or small modelling steps sit up to 0.5 mm below that face, they are trimmed off, as long as the trim removes at most 2% of the part and gives it at least 10% more bed contact.
 3. Expand **3D Printer → Kit 01** in Layers. Each **Plate** layer contains its bed outline, label and numbered meshes at physical print size. The viewport zooms to the plates. Toggle the plate layers to inspect them individually. Turn on **Assembly reference**, select its objects and use Zoom Selected to see the numbered pieces in their assembled positions. The original building stays in the document.
 4. Save the Rhino document to keep the preview. Each new bake creates a separate numbered kit. Preview creates no STL files.
 
@@ -56,13 +57,19 @@ Go2Bed keeps existing object names. For unnamed objects, it numbers parts by the
 
 Finger joints are the default. Eligible lower edges of walls (parts whose largest flat side is vertical) get rows of 5 mm wide tabs and matching blind sockets in the horizontal slab underneath. The tabs enter vertically during assembly. The default 0.20 mm clearance on each side makes a 5.40 mm socket for a 5 mm finger. The same allowance applies at the tip. Short edges, thin slabs, openings and contacts blocked by another part can limit where joints are placed.
 
-Filament pins cover the contacts that fingers do not reach, in any orientation. Each pair of planar mating faces gets up to two matching blind holes, placed as far apart as the contact allows. Push a short offcut of 1.75 mm filament into each hole before gluing. The holes are 2.0 mm across at the default clearance and up to 3 mm deep, and always keep 0.6 mm of material around and behind them. Contacts with fingers get no pins.
+Filament pins cover the contacts that fingers do not reach, in any orientation. Each pair of planar mating faces gets up to two matching blind holes, placed as far apart as the contact allows. Push a short offcut of 1.75 mm filament into each hole before gluing. The **Pin hole diameter** is 2.0 mm by default and can be set from 1.75 to 3.5 mm: raise it if pins don't go in, lower it if they fall out. Holes are up to 3 mm deep and always keep 0.6 mm of material around and behind them. Contacts with fingers get no pins.
 
-Contacts too narrow for a pin get matching 1.2 mm square recesses instead, 0.3 mm deep at print scale. Use the recesses to line up the pieces during dry fitting. Rhino reports the number of finger joints, pin positions and pairs of assembly marks.
+**Assembly marks**: contacts too narrow for a pin get matching 1.2 mm square recesses instead, 0.3 mm deep at print scale, on both mating faces. Use them to line up the pieces during dry fitting. Turn **Assembly marks** off to keep those faces plain. Rhino reports the number of finger joints, pin positions and pairs of assembly marks.
+
+### Printer library
+
+The **Printer** list in BedLayout and the Grasshopper **Printer Bed** component share one library of build volumes (width × depth × height, mm): Prusa MK4S, MK3S+, CORE One, MINI+ and XL; Bambu Lab X1C / P1S / A1, A1 mini and H2D; Creality Ender-3 V3, K1 and K1 Max; Elegoo Neptune 4 Pro; Anycubic Kobra 3; Ultimaker S5; Voron 2.4 (350). Choose **Custom** or edit any size for other printers. STL export works for any printer. **BedPrusa** and **Export for Prusa** write MK4S projects and refuse plates larger than the MK4S bed.
+
+To script the Rhino command, every setting is a command-line option: `-BedLayout Printer=PrusaMINI PinHole=2.1 AssemblyMarks=Off _Enter`.
 
 ### Seams in split parts
 
-A part longer than the bed is split into pieces named with a letter each, such as `Roof 01 a` and `Roof 01 b`. Each seam gets up to two dovetail keys where the part is solid on both sides. The keys run the full height of the part, so they print without overhangs. Lay the pieces face down on a flat surface and slide the keys together from above. The socket is larger than the key by the joint clearance on every side. Where no key fits, such as a seam through a row of openings, the seam stays plain and Rhino reports it. The Grasshopper components always add pins and seam keys.
+A part longer than the bed is split into pieces named with a letter each, such as `Roof 01 a` and `Roof 01 b`. Each seam gets up to two dovetail keys where the part is solid on both sides. The keys run the full height of the part, so they print without overhangs. Lay the pieces face down on a flat surface and slide the keys together from above. The socket is larger than the key by the joint clearance on every side. Where no key fits, such as a seam through a row of openings, the seam stays plain and Rhino reports it. The Grasshopper components always add seam keys.
 
 ## Export the reviewed kit
 

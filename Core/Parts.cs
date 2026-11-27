@@ -43,7 +43,7 @@ internal sealed class PartException : InvalidOperationException
 internal static class Parts
 {
     private const double Tol = .001; // All geometry here is at print scale, in millimetres.
-    internal static List<Component> Clean(IEnumerable<SourcePart> objects, double factor, bool fingers, double clearance, bool pins = true)
+    internal static List<Component> Clean(IEnumerable<SourcePart> objects, double factor, JointOptions joints)
     {
         var components = new List<Component>();
         // Only original names determine trimming priority. A group trims at its highest-priority member.
@@ -66,10 +66,10 @@ internal static class Parts
                 components.Add(new Component(cluster.Name,source,solid,members));
         }
         components=SolidCleanup.Cut(components);
-        var jointed = fingers ? FingerJoints.Apply(components,clearance) : new HashSet<(int, int)>();
+        var jointed = joints.Fingers ? FingerJoints.Apply(components,joints.Clearance) : new HashSet<(int, int)>();
         // Contacts that take pins need no marks. Fingered contacts keep theirs.
-        var pinned = pins ? AlignmentPins.Apply(components,clearance,jointed) : null;
-        AssemblyMarks.Apply(components,pinned);
+        var pinned = joints.Pins ? AlignmentPins.Apply(components,joints.PinHole,jointed) : null;
+        if (joints.Marks) AssemblyMarks.Apply(components,pinned);
         return components;
     }
 

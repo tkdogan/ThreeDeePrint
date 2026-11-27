@@ -14,7 +14,7 @@ public sealed class Go2BedPlugin : PlugIn { }
 
 internal static class PreviewDefaults
 {
-    internal const double Scale = 50, Width = 250, Depth = 210, Height = 220;
+    internal const double Scale = 50;
 }
 
 public sealed class BedLayout : Command
@@ -73,31 +73,50 @@ public sealed class BedLayout : Command
         RhinoApp.WriteLine($"Selected the {(found==1 ? "object" : $"{found} objects")} involved. Run Zoom Selected to find {(found==1 ? "it" : "them")}.");
     }
 
-    private static PreviewSettings? ReadSettings()
+    // Scripted -BedLayout: every setting is a command-line option, named after the dialog label.
+    // Example: -BedLayout Printer=PrusaMINI FilamentPins=Off Scale=100 _Enter
+    private PreviewSettings? ReadSettings()
     {
-        var defaults = PreviewSettings.Defaults;
-        double scale=defaults.Scale,width=defaults.Width,depth=defaults.Depth,height=defaults.Height;
-        bool Read(string label, ref double value) =>
-            RhinoGet.GetNumber(label,true,ref value,.01,1000000) is Result.Success or Result.Nothing;
-        if (!Read("Scale denominator",ref scale) || !Read("Bed width in mm",ref width) ||
-            !Read("Bed depth in mm",ref depth) || !Read("Build height in mm",ref height)) return null;
-        using var joints = new GetOption();
-        joints.SetCommandPrompt("Panel alignment joints");
-        joints.AddOption("Plain"); joints.AddOption("FingerJoints");
-        var sourceColors = new OptionToggle(defaults.UseSourceColors,"Off","On");
-        int colorOption = joints.AddOptionToggle("SourceColors",ref sourceColors);
-        var pins = new OptionToggle(defaults.Pins,"Off","On");
-        int pinOption = joints.AddOptionToggle("FilamentPins",ref pins);
-        joints.SetDefaultString("FingerJoints"); joints.AcceptNothing(true);
-        GetResult jointChoice;
-        do { jointChoice = joints.Get(); }
-        while (jointChoice == GetResult.Option && joints.OptionIndex() is var chosen && (chosen == colorOption || chosen == pinOption));
-        if (jointChoice!=GetResult.Option && jointChoice!=GetResult.Nothing) return null;
-        bool fingers=jointChoice==GetResult.Nothing || joints.Option().EnglishName=="FingerJoints";
-        double clearance=defaults.Clearance;
-        if (RhinoGet.GetNumber("Joint clearance per side in mm",true,ref clearance,.05,.60)
-            is not (Result.Success or Result.Nothing)) return null;
-        return new PreviewSettings(scale,width,depth,height,fingers,clearance,sourceColors.CurrentValue,pins.CurrentValue);
+        var current = previous;
+        var j = current.Joints;
+        var scale = new OptionDouble(current.Scale,.01,1000000);
+        var width = new OptionDouble(current.Width,7,10000);
+        var depth = new OptionDouble(current.Depth,7,10000);
+        var height = new OptionDouble(current.Height,1,10000);
+        var clearance = new OptionDouble(j.Clearance,JointOptions.MinClearance,JointOptions.MaxClearance);
+        var pinHole = new OptionDouble(j.PinHole,JointOptions.MinPinHole,JointOptions.MaxPinHole);
+        var fingers = new OptionToggle(j.Fingers,"Off","On");
+        var pins = new OptionToggle(j.Pins,"Off","On");
+        var marks = new OptionToggle(j.Marks,"Off","On");
+        var colors = new OptionToggle(current.UseSourceColors,"Off","On");
+        var printers = PrinterBeds.All.Select(p => p.OptionName).Append(PrinterBeds.Custom).ToArray();
+        while (true)
+        {
+            var bed = PrinterBeds.Matching(width.CurrentValue,depth.CurrentValue,height.CurrentValue);
+            int printerIndex = bed == null ? printers.Length-1 : Array.IndexOf(PrinterBeds.All,bed);
+            using var get = new GetOption();
+            get.SetCommandPrompt("Lay out print plates. Press Enter to bake");
+            get.AcceptNothing(true);
+            get.AddOptionDouble("Scale",ref scale,Labels.ScaleHelp);
+            int printerOption = get.AddOptionList(Labels.Printer,printers,printerIndex);
+            get.AddOptionDouble("BedWidth",ref width,Labels.BedWidthHelp);
+            get.AddOptionDouble("BedDepth",ref depth,Labels.BedDepthHelp);
+            get.AddOptionDouble("BuildHeight",ref height,Labels.BuildHeightHelp);
+            get.AddOptionToggle("FingerJoints",ref fingers);
+            get.AddOptionToggle("FilamentPins",ref pins);
+            get.AddOptionDouble("PinHole",ref pinHole,Labels.PinHoleHelp);
+            get.AddOptionToggle("AssemblyMarks",ref marks);
+            get.AddOptionDouble("Clearance",ref clearance,Labels.ClearanceHelp);
+            get.AddOptionToggle("SourceColors",ref colors);
+            var result = get.Get();
+            if (result == GetResult.Nothing) break;
+            if (result != GetResult.Option) return null;
+            if (get.OptionIndex() == printerOption && PrinterBeds.Find(printers[get.Option().CurrentListOptionIndex]) is { } chosen)
+                (width.CurrentValue,depth.CurrentValue,height.CurrentValue) = (chosen.Width,chosen.Depth,chosen.Height);
+        }
+        return new PreviewSettings(scale.CurrentValue,width.CurrentValue,depth.CurrentValue,height.CurrentValue,
+            new JointOptions(fingers.CurrentValue,pins.CurrentValue,marks.CurrentValue,clearance.CurrentValue,pinHole.CurrentValue),
+            colors.CurrentValue);
     }
 
 }
